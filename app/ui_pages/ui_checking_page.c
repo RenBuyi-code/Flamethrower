@@ -10,9 +10,9 @@
 
 #define UI_DISP_W          122
 #define UI_CHECKING_MS     5000U
-#define UI_PRESSURE_UPDATE_MS 200U
+#define UI_CHECKING_PRESSURE_UPDATE_MS 200U
 #define UI_DOTS_INTERVAL_MS 300U
-#define UI_FONT_H          16U
+#define UI_CHECKING_FONT_H          16U
 
 static sl_Page s_check_page;
 
@@ -70,7 +70,7 @@ static void uicp_sync_from_service(sl_Page *self)
 
   now_tick = sl_ui_get_tick();
   if((st->pressure_update_tick == 0U) ||
-     ((now_tick - st->pressure_update_tick) >= UI_PRESSURE_UPDATE_MS))
+     ((now_tick - st->pressure_update_tick) >= UI_CHECKING_PRESSURE_UPDATE_MS))
   {
     st->pressure_pct = snap.pressure_pct;
     st->pressure_update_tick = now_tick;
@@ -120,7 +120,7 @@ static void uicp_draw(sl_Page *self)
     sl_disp_draw_string((uint16_t)(dot_x + (uint16_t)(i * 8U)), 0, ".", &sl_font_chinese, 0);
   }
 
-  (void)sl_text_draw_center(UI_FONT_H, row2, &sl_font_chinese, 0);
+  (void)sl_text_draw_center(UI_CHECKING_FONT_H, row2, &sl_font_chinese, 0);
 }
 
 static int uicp_proc(sl_Page *self, const sl_Event *evt)

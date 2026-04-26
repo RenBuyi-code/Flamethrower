@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include "../inc/sl_ui.h"
 #include "../inc/sl_event.h"
 #include "../inc/sl_page_manager.h"

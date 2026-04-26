@@ -1,30 +1,35 @@
 /**
  * @file    sl_font_ascii_16x16.c
- * @brief   8x16 ASCII 点阵字库实现（默认字体）
+ * @brief   8x16 ASCII font implementation (default font)
  *
- * 本文件实现：
- *   1) 8x16 点阵字模数据表（95 个可打印 ASCII 字符）；
- *   2) 8x16 字体绘制回调函数�? *   3) 全局默认字体对象 sl_default_font�? *
- * 字模编码格式（与 PCtoLCD2002 取模设置对应）：
- *   · 阴码：1=点亮，0=熄灭
- *   · 逐列式：数据按列排列，从左到右
- *   · 低位在前：每字节 bit0 在最上面（顶行）
- *   · 每字符 16 字节 = 8 列 × 每列 2 字节
- *     - 低字节：上半部像素（row 0 ~ row 7）
- *     - 高字节：下半部像素（row 8 ~ row 15）
+ * This file implements:
+ *   1) 8x16 font data table (95 printable ASCII characters)
+ *   2) 8x16 font drawing callback function
+ *   3) Global default font object sl_default_font
  *
- * 绘制时按列读取，逐像素调用 sl_disp_draw_pixel() */
+ * Font encoding format:
+ *   - Negative code: 1=lit, 0=off
+ *   - Column-wise: data arranged by columns, left to right
+ *   - Low bit first: bit0 of each byte at the top
+ *   - Each character: 16 bytes = 8 columns × 2 bytes per column
+ *     - Low byte: upper pixels (row 0 ~ row 7)
+ *     - High byte: lower pixels (row 8 ~ row 15)
+ *
+ * Draw by reading column by column, calling sl_disp_draw_pixel() for each pixel
+ */
 
 /**
- * @brief  8x16 点阵字模数据表
- * 索引方式：sl_ascii_8x16_data[char - 0x20]
- * 每字符 16 字节：col0_lo, col0_hi, col1_lo, col1_hi, ..., col7_hi
+ * @brief  8x16 font data table
+ * Index: sl_ascii_8x16_data[char - 0x20]
+ * Each character: 16 bytes: col0_lo, col0_hi, col1_lo, col1_hi, ..., col7_hi
+ */
 
+#include <stddef.h>
 #include "sl_font.h"
 #include "sl_font_ascii_16x16.h"
 #include "../core/inc/sl_display.h"
 
-/* ======================== 8x16 点阵字模======================== */
+/* ======================== 8x16 font ======================== */
 
 /**
  * @brief  8x16 点阵字模数据
@@ -144,7 +149,7 @@ const uint8_t sl_ascii_8x16_data[95][16] = {
  *   bitmap[col*2]     = 第 col 列，rows 0-7（bit0=row0, bit7=row7）
  *   bitmap[col*2 + 1] = 第 col 列，rows 8-15（bit0=row8, bit7=row15）
  *   每字符 16 字节 = 8 列 × 每列 2 字节 */
-static uint16_t ascii_8x16_draw(uint16_t x, uint16_t y, const char *str,
+uint16_t ascii_8x16_draw(uint16_t x, uint16_t y, const char *str,
                                const void *font, uint8_t color) {
     (void)font;
     const uint8_t *p = (const uint8_t *)str;

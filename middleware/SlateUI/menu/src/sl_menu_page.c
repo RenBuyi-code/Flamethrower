@@ -22,6 +22,7 @@
  *   · 退出时释放槽位，支持页面嵌套和返回
  */
 
+#include <stdio.h>
 #include "../inc/sl_menu_page.h"
 #include "../../core/inc/sl_display.h"
 #include "../../core/inc/sl_page_manager.h"

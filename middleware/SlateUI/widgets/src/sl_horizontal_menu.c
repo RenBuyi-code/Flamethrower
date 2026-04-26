@@ -9,6 +9,7 @@
  *   · 事件：左右键移动光标（支持循环），确认键选中当前项并触发回调。
  */
 
+#include <stddef.h>
 #include "../inc/sl_horizontal_menu.h"
 #include "../../core/inc/sl_display.h"
 

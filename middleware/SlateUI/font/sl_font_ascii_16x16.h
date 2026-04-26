@@ -23,4 +23,8 @@
 /** @brief 95 个可打印 ASCII 字符的 8x16 点阵数据（每字符 16 字节，列优先） */
 extern const uint8_t sl_ascii_8x16_data[95][16];
 
+/** @brief 8x16 ASCII 字符绘制函数 */
+uint16_t ascii_8x16_draw(uint16_t x, uint16_t y, const char *str,
+                          const void *font, uint8_t color);
+
 #endif

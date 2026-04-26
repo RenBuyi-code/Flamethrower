@@ -566,59 +566,7 @@ void wk_freertos_init(void)
   vTaskStartScheduler();
 }
 
-/*
- * Keil 工程文件尚未自动纳入新目录源码时，启用以下聚合编译入口�? * 后续�?app/domain/hal_if/bsp/cfg 加入工程后，可移除此段并独立编译�? */
-#ifndef FLAMETHROWER_SEPARATE_COMPILATION
-#include "../../cfg/system_config.c"
-#include "../../domain/event_log.c"
-#include "../../domain/machine_state.c"
-#include "../../domain/fault_manager.c"
-#include "../../domain/safety_guard.c"
-#include "../../domain/dmx_strategy.c"
-#include "../../app/app_core.c"
-#include "../../app/app_task_common.c"
-#include "../../app/ui_services.c"
-#include "../../app/task_safety/task_safety.c"
-#include "../../app/task_control/task_control.c"
-#include "../../app/task_ui/task_ui.c"
-#include "../../app/task_dmx/task_dmx.c"
-#include "../../bsp/at32f415/bsp_uart.c"
-#include "../../bsp/at32f415/bsp_at32f415.c"
-#define ST7920_COMMAND_CMD_DELAY        10
-#define ST7920_COMMAND_DATA_DELAY        1
-#include "../../bsp/st7920/src/driver_st7920.c"
-#include "../../bsp/st7920/at32f415_st7920_port.c"
-#include "../../middleware/MultiButton/multi_button.c"
-#include "../../middleware/easyDMX/easy_dmx.c"
-#include "../../middleware/SlateUI/core/src/sl_display.c"
-#include "../../middleware/SlateUI/core/src/sl_event.c"
-#include "../../middleware/SlateUI/core/src/sl_key_repeat.c"
-#include "../../middleware/SlateUI/core/src/sl_language.c"
-#include "../../middleware/SlateUI/core/src/sl_page_manager.c"
-#include "../../middleware/SlateUI/core/src/sl_page_registry.c"
-#include "../../middleware/SlateUI/core/src/sl_tween.c"
-#include "../../middleware/SlateUI/core/src/sl_ui.c"
-#include "../../middleware/SlateUI/widgets/src/sl_widget.c"
-#include "../../middleware/SlateUI/widgets/src/sl_label.c"
-#include "../../middleware/SlateUI/widgets/src/sl_list_view.c"
-#include "../../middleware/SlateUI/widgets/src/sl_linear_layout.c"
-#include "../../middleware/SlateUI/widgets/src/sl_horizontal_menu.c"
-#include "../../middleware/SlateUI/widgets/src/sl_icon.c"
-#include "../../middleware/SlateUI/widgets/src/sl_icon_item.c"
-#include "../../middleware/SlateUI/widgets/src/sl_progress_bar.c"
-#include "../../middleware/SlateUI/menu/src/sl_menu_model.c"
-#include "../../middleware/SlateUI/menu/src/sl_menu_page.c"
-#include "../../middleware/SlateUI/font/sl_font_ascii_16x16.c"
-#include "../../middleware/SlateUI/font/sl_font_chinese_16x16.c"
-#include "../../middleware/SlateUI/port/sl_port.c"
-#include "../../app/ui_pages/ui_idle_page.c"
-#include "../../app/ui_pages/ui_main_menu.c"
-#include "../../app/ui_pages/ui_safety_page.c"
-#include "../../app/ui_pages/ui_setting_page.c"
-#include "../../app/ui_pages/ui_language_page.c"
-#include "../../app/ui_pages/ui_splash_page.c"
-#include "../../app/ui_pages/ui_checking_page.c"
-#endif
+
 
 
 

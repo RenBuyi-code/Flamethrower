@@ -21,7 +21,9 @@
  *   或直接使用预定义的 SL_CH_xxx 宏常量。
  */
 
+#include <stddef.h>
 #include "sl_font.h"
+#include "sl_font_ascii_16x16.h"
 #include "sl_font_chinese_16x16.h"
 #include "../core/inc/sl_display.h"
 

@@ -8,6 +8,7 @@
  *   · 位图数据通过 sl_disp_draw_bitmap_1bpp() 绘制。
  */
 
+#include <stddef.h>
 #include "../inc/sl_icon.h"
 #include "../../core/inc/sl_display.h"
 

@@ -10,6 +10,7 @@
  *   · 当 min == max 时仅显示背景，不绘制前景。
  */
 
+#include <stddef.h>
 #include "../inc/sl_progress_bar.h"
 #include "../../core/inc/sl_display.h"
 
