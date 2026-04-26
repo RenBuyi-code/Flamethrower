@@ -26,7 +26,7 @@
 #include "sl_font.h"
 
 /** @brief 支持的汉字+ASCII 16x16字符总数 */
-#define SL_CHINESE_GLYPH_COUNT  170
+#define SL_CHINESE_GLYPH_COUNT  173
 
 /**
  * @brief  16x16 中文字模数据表

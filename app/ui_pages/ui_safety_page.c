@@ -3,11 +3,13 @@
 #include "../../middleware/SlateUI/core/inc/sl_page_manager.h"
 #include "../../middleware/SlateUI/core/inc/sl_language.h"
 #include "../../middleware/SlateUI/font/sl_font_chinese_16x16.h"
+#include "../../app/log_rtt.h"
 #include <string.h>
+#include <stdint.h>
 
 #define UI_CHAR_H          16
 
-static sl_Page s_page;
+static sl_Page s_safety_page;
 static int16_t *s_tilt_ref;
 static bool s_tilt_changed;
 
@@ -15,6 +17,7 @@ static void uisf_init(sl_Page *self)
 {
   (void)self;
   s_tilt_changed = false;
+  APP_LOGI("safety: init (tilt page)");
 }
 
 static void uisf_draw(sl_Page *self)
@@ -64,18 +67,20 @@ static int uisf_proc(sl_Page *self, const sl_Event *evt)
 
 sl_Page *ui_safety_page_get(void)
 {
-  if(s_page.init == 0)
+  if(s_safety_page.init == 0)
   {
-    s_page.name = "safety";
-    s_page.init = uisf_init;
-    s_page.draw = uisf_draw;
-    s_page.proc = uisf_proc;
-    s_page.exit = 0;
-    s_page.presenter = 0;
-    s_page.data = 0;
-    s_page.arg = 0;
+    s_safety_page.name = "safety";
+    s_safety_page.init = uisf_init;
+    s_safety_page.draw = uisf_draw;
+    s_safety_page.proc = uisf_proc;
+    s_safety_page.exit = 0;
+    s_safety_page.presenter = 0;
+    s_safety_page.data = 0;
+    s_safety_page.arg = 0;
+    APP_LOGI("safety: page init set, addr=%p, init=%p", (void*)&s_safety_page, (void*)(uintptr_t)s_safety_page.init);
   }
-  return &s_page;
+  APP_LOGI("safety: get page, addr=%p, init=%p", (void*)&s_safety_page, (void*)(uintptr_t)s_safety_page.init);
+  return &s_safety_page;
 }
 
 void ui_safety_page_set_tilt_ref(int16_t *tilt_enable)

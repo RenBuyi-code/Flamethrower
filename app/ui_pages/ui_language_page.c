@@ -6,13 +6,14 @@
 #include "../../middleware/SlateUI/font/sl_font_chinese_16x16.h"
 #include "../../app/log_rtt.h"
 #include <string.h>
+#include <stdint.h>
 
 #define UI_CHAR_H          16
 #define UI_ARROW_X         0
 #define UI_INDEX_X         8
 #define UI_LABEL_X         24
 
-static sl_Page s_page;
+static sl_Page s_lang_page;
 static int s_lang_cursor;
 static bool s_lang_selected;
 
@@ -101,18 +102,20 @@ static int uilp_proc(sl_Page *self, const sl_Event *evt)
 
 sl_Page *ui_language_page_get(void)
 {
-  if(s_page.init == 0)
+  if(s_lang_page.init == 0)
   {
-    s_page.name = "language";
-    s_page.init = uilp_init;
-    s_page.draw = uilp_draw;
-    s_page.proc = uilp_proc;
-    s_page.exit = 0;
-    s_page.presenter = 0;
-    s_page.data = 0;
-    s_page.arg = 0;
+    s_lang_page.name = "language";
+    s_lang_page.init = uilp_init;
+    s_lang_page.draw = uilp_draw;
+    s_lang_page.proc = uilp_proc;
+    s_lang_page.exit = 0;
+    s_lang_page.presenter = 0;
+    s_lang_page.data = 0;
+    s_lang_page.arg = 0;
+    APP_LOGI("language: page init set, addr=%p, init=%p", (void*)&s_lang_page, (void*)(uintptr_t)s_lang_page.init);
   }
-  return &s_page;
+  APP_LOGI("language: get page, addr=%p, init=%p", (void*)&s_lang_page, (void*)(uintptr_t)s_lang_page.init);
+  return &s_lang_page;
 }
 
 int ui_language_page_consume_selection(void)

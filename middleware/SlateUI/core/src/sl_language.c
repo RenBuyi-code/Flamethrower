@@ -83,7 +83,7 @@ static const char* const strings[SL_LANG_MAX][SL_STR_COUNT] = {
         [SL_STR_LOCK]       = "锁阀延时",
         [SL_STR_CHECKING]   = "系统检测中...",
         [SL_STR_SAFETY_SET] = "安全设置",
-        [SL_STR_TILT]       = "倾斜保护",
+        [SL_STR_TILT]       = "倾倒保护",
     },
 };
 

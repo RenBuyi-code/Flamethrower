@@ -145,7 +145,7 @@ static void idle_draw(sl_Page *self)
 
   (void)self;
 
-  if(s_data.fault_mask != 0U)
+  if((s_data.fault_mask != 0U) || (s_data.state == MACHINE_FAULT) || (s_data.state == MACHINE_LOCKED))
   {
     snprintf(row1, sizeof(row1), "DMX:%03u", (unsigned)s_data.dmx_address);
     uidle_append_fault_str(row2, sizeof(row2), s_data.fault_mask);

@@ -4,6 +4,7 @@
 #include "../../middleware/SlateUI/core/inc/sl_language.h"
 #include "../../middleware/SlateUI/font/sl_font.h"
 #include "../../middleware/SlateUI/font/sl_font_chinese_16x16.h"
+#include "../../app/log_rtt.h"
 #include <string.h>
 
 #define UI_DISP_W          122
@@ -18,6 +19,13 @@ static const uint8_t s_item_ids[UI_MENU_ITEM_COUNT] = {
     SL_STR_PRESSURE_SET,
     SL_STR_TILT,
     SL_STR_LANGUAGE
+};
+
+static const char *s_item_names[UI_MENU_ITEM_COUNT] = {
+    "DMX",
+    "Pressure",
+    "Tilt",
+    "Language"
 };
 
 static sl_Page s_menu_page;
@@ -84,29 +92,24 @@ static int uimm_proc(sl_Page *self, const sl_Event *evt)
       if(s_cursor > 0)
       {
         s_cursor--;
+        s_scroll_off = (s_cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
+        APP_LOGI("menu: cursor=%d (%s)", s_cursor, s_item_names[s_cursor]);
+        sl_page_request_redraw();
       }
-      else
-      {
-        s_cursor = UI_MENU_ITEM_COUNT - 1;
-      }
-      s_scroll_off = (s_cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
-      sl_page_request_redraw();
       break;
 
     case SL_EVT_KEY_DOWN:
       if(s_cursor < UI_MENU_ITEM_COUNT - 1)
       {
         s_cursor++;
+        s_scroll_off = (s_cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
+        APP_LOGI("menu: cursor=%d (%s)", s_cursor, s_item_names[s_cursor]);
+        sl_page_request_redraw();
       }
-      else
-      {
-        s_cursor = 0;
-      }
-      s_scroll_off = (s_cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
-      sl_page_request_redraw();
       break;
 
     case SL_EVT_KEY_ENTER:
+      APP_LOGI("menu: select=%d (%s)", s_cursor, s_item_names[s_cursor]);
       s_selected = s_cursor;
       return 1;
 
