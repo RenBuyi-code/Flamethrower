@@ -1,6 +1,6 @@
 #include "ui_main_menu.h"
 #include "../../middleware/SlateUI/core/inc/sl_display.h"
-#include "../../middleware/SlateUI/core/inc/sl_page_manager.h"
+#include "../../middleware/SlateUI/core/inc/sl_ui.h"
 #include "../../middleware/SlateUI/core/inc/sl_language.h"
 #include "../../middleware/SlateUI/font/sl_font.h"
 #include "../../middleware/SlateUI/font/sl_font_chinese_16x16.h"
@@ -28,38 +28,53 @@ static const char *s_item_names[UI_MENU_ITEM_COUNT] = {
     "Language"
 };
 
+static const char *s_item_targets[UI_MENU_ITEM_COUNT] = {
+    "dmx_set",
+    "pressure_set",
+    "safety",
+    "language"
+};
+
 static sl_Page s_menu_page;
-static int s_cursor;
-static int s_scroll_off;
-static int s_selected;
-static bool s_back_to_idle;
+
+typedef struct
+{
+  int cursor;
+  int scroll_off;
+} ui_main_menu_state_t;
+
+static ui_main_menu_state_t s_menu_state;
+
+static ui_main_menu_state_t *uimm_state(sl_Page *self)
+{
+  return (ui_main_menu_state_t *)self->data;
+}
 
 static void uimm_init(sl_Page *self)
 {
-  (void)self;
-  s_cursor = 0;
-  s_scroll_off = 0;
-  s_selected = UI_MENU_ITEM_NONE;
-  s_back_to_idle = false;
+  ui_main_menu_state_t *st = uimm_state(self);
+  st->cursor = 0;
+  st->scroll_off = 0;
 }
 
 static void uimm_draw(sl_Page *self)
 {
   int row0_idx, row1_idx;
   int i;
-  (void)self;
+  ui_main_menu_state_t *st = uimm_state(self);
 
   sl_disp_fill_rect(0, 0, SL_DISP_WIDTH, 32, 1);
 
-  row0_idx = s_scroll_off;
-  row1_idx = s_scroll_off + 1;
+  row0_idx = st->scroll_off;
+  row1_idx = st->scroll_off + 1;
 
   for(i = 0; i < 2; i++)
   {
     int idx = (i == 0) ? row0_idx : row1_idx;
     int y = i * UI_CHAR_H;
-    bool is_focused = (idx == s_cursor);
+    bool is_focused = (idx == st->cursor);
     char idx_buf[2];
+    sl_TextSegment segs[3];
     uint8_t color = is_focused ? 1U : 0U;
 
     if(idx >= UI_MENU_ITEM_COUNT) break;
@@ -70,51 +85,58 @@ static void uimm_draw(sl_Page *self)
     if(is_focused)
     {
       sl_disp_fill_rect(0, y, SL_DISP_WIDTH, UI_CHAR_H, 0);
-      sl_disp_draw_string(UI_ARROW_X, (uint16_t)y, ">", &sl_default_font, color);
+      segs[0].text = ">";
     }
     else
     {
-      sl_disp_draw_string(UI_ARROW_X, (uint16_t)y, " ", &sl_default_font, color);
+      segs[0].text = " ";
     }
 
-    sl_disp_draw_string(UI_INDEX_X, (uint16_t)y, idx_buf, &sl_default_font, color);
-    sl_disp_draw_string(UI_LABEL_X, (uint16_t)y, SL_LANG(s_item_ids[idx]), &sl_font_chinese, color);
+    segs[0].x = UI_ARROW_X;
+    segs[0].font = &sl_default_font;
+    segs[1].x = UI_INDEX_X;
+    segs[1].text = idx_buf;
+    segs[1].font = &sl_default_font;
+    segs[2].x = UI_LABEL_X;
+    segs[2].text = SL_LANG(s_item_ids[idx]);
+    segs[2].font = &sl_font_chinese;
+    sl_text_draw_segments((uint16_t)y, segs, 3U, color);
   }
 }
 
 static int uimm_proc(sl_Page *self, const sl_Event *evt)
 {
-  (void)self;
+  ui_main_menu_state_t *st = uimm_state(self);
 
   switch(evt->type)
   {
     case SL_EVT_KEY_UP:
-      if(s_cursor > 0)
+      if(st->cursor > 0)
       {
-        s_cursor--;
-        s_scroll_off = (s_cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
-        APP_LOGI("menu: cursor=%d (%s)", s_cursor, s_item_names[s_cursor]);
-        sl_page_request_redraw();
+        st->cursor--;
+        st->scroll_off = (st->cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
+        APP_LOGI("menu: cursor=%d (%s)", st->cursor, s_item_names[st->cursor]);
+        sl_ui_request_redraw();
       }
       break;
 
     case SL_EVT_KEY_DOWN:
-      if(s_cursor < UI_MENU_ITEM_COUNT - 1)
+      if(st->cursor < UI_MENU_ITEM_COUNT - 1)
       {
-        s_cursor++;
-        s_scroll_off = (s_cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
-        APP_LOGI("menu: cursor=%d (%s)", s_cursor, s_item_names[s_cursor]);
-        sl_page_request_redraw();
+        st->cursor++;
+        st->scroll_off = (st->cursor <= 1) ? 0 : (UI_MENU_ITEM_COUNT - 2);
+        APP_LOGI("menu: cursor=%d (%s)", st->cursor, s_item_names[st->cursor]);
+        sl_ui_request_redraw();
       }
       break;
 
     case SL_EVT_KEY_ENTER:
-      APP_LOGI("menu: select=%d (%s)", s_cursor, s_item_names[s_cursor]);
-      s_selected = s_cursor;
-      return 1;
+      APP_LOGI("menu: select=%d (%s)", st->cursor, s_item_names[st->cursor]);
+      (void)sl_ui_navigate(s_item_targets[st->cursor]);
+      sl_ui_request_redraw();
+      break;
 
     case SL_EVT_KEY_BACK:
-      s_back_to_idle = true;
       return 1;
 
     default:
@@ -133,22 +155,9 @@ sl_Page *ui_main_menu_get(void)
     s_menu_page.proc = uimm_proc;
     s_menu_page.exit = 0;
     s_menu_page.presenter = 0;
-    s_menu_page.data = 0;
+    s_menu_page.tick = 0;
+    s_menu_page.data = &s_menu_state;
     s_menu_page.arg = 0;
   }
   return &s_menu_page;
-}
-
-int ui_main_menu_consume_selected(void)
-{
-  int v = s_selected;
-  s_selected = UI_MENU_ITEM_NONE;
-  return v;
-}
-
-bool ui_main_menu_consume_back_to_idle(void)
-{
-  bool v = s_back_to_idle;
-  s_back_to_idle = false;
-  return v;
 }

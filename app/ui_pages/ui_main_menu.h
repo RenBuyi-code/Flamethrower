@@ -13,7 +13,5 @@
 #define UI_MENU_ITEM_COUNT      4
 
 sl_Page *ui_main_menu_get(void);
-int ui_main_menu_consume_selected(void);
-bool ui_main_menu_consume_back_to_idle(void);
 
 #endif

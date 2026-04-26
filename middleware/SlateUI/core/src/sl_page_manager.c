@@ -263,3 +263,7 @@ void sl_page_manager_tick(uint16_t delta_ms) {
         redraw_pending = 0;
     }
 }
+
+sl_Page *sl_page_manager_current(void) {
+    return current_page();
+}

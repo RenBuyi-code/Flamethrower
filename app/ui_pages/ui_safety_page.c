@@ -1,6 +1,7 @@
 #include "ui_safety_page.h"
+#include "../ui_services.h"
 #include "../../middleware/SlateUI/core/inc/sl_display.h"
-#include "../../middleware/SlateUI/core/inc/sl_page_manager.h"
+#include "../../middleware/SlateUI/core/inc/sl_ui.h"
 #include "../../middleware/SlateUI/core/inc/sl_language.h"
 #include "../../middleware/SlateUI/font/sl_font_chinese_16x16.h"
 #include "../../app/log_rtt.h"
@@ -10,26 +11,34 @@
 #define UI_CHAR_H          16
 
 static sl_Page s_safety_page;
-static int16_t *s_tilt_ref;
-static bool s_tilt_changed;
+typedef struct
+{
+  int16_t *tilt_ref;
+} ui_safety_state_t;
+
+static ui_safety_state_t s_safety_state;
+
+static ui_safety_state_t *uisf_state(sl_Page *self)
+{
+  return SL_PAGE_DATA_AS(ui_safety_state_t, self);
+}
 
 static void uisf_init(sl_Page *self)
 {
   (void)self;
-  s_tilt_changed = false;
   APP_LOGI("safety: init (tilt page)");
 }
 
 static void uisf_draw(sl_Page *self)
 {
+  ui_safety_state_t *st = uisf_state(self);
   char row1[20];
   char row2[20];
   const char *state_text;
-  (void)self;
 
   sl_disp_fill_rect(0, 0, SL_DISP_WIDTH, 32, 1);
 
-  state_text = ((s_tilt_ref != 0) && (*s_tilt_ref != 0)) ? SL_LANG(SL_STR_ON) : SL_LANG(SL_STR_OFF);
+  state_text = ((st->tilt_ref != 0) && (*st->tilt_ref != 0)) ? SL_LANG(SL_STR_ON) : SL_LANG(SL_STR_OFF);
   row1[0] = '>';
   row1[1] = '\0';
   strcat(row1, SL_LANG(SL_STR_TILT));
@@ -44,17 +53,17 @@ static void uisf_draw(sl_Page *self)
 
 static int uisf_proc(sl_Page *self, const sl_Event *evt)
 {
-  (void)self;
+  ui_safety_state_t *st = uisf_state(self);
   switch(evt->type)
   {
     case SL_EVT_KEY_UP:
     case SL_EVT_KEY_DOWN:
     case SL_EVT_KEY_ENTER:
-      if(s_tilt_ref != 0)
+      if(st->tilt_ref != 0)
       {
-        *s_tilt_ref = (*s_tilt_ref == 0) ? 1 : 0;
-        s_tilt_changed = true;
-        sl_page_request_redraw();
+        *st->tilt_ref = (*st->tilt_ref == 0) ? 1 : 0;
+        ui_service_save_tilt_enable(*st->tilt_ref);
+        sl_ui_request_redraw();
       }
       break;
     case SL_EVT_KEY_BACK:
@@ -75,7 +84,8 @@ sl_Page *ui_safety_page_get(void)
     s_safety_page.proc = uisf_proc;
     s_safety_page.exit = 0;
     s_safety_page.presenter = 0;
-    s_safety_page.data = 0;
+    s_safety_page.tick = 0;
+    s_safety_page.data = &s_safety_state;
     s_safety_page.arg = 0;
     APP_LOGI("safety: page init set, addr=%p, init=%p", (void*)&s_safety_page, (void*)(uintptr_t)s_safety_page.init);
   }
@@ -85,19 +95,5 @@ sl_Page *ui_safety_page_get(void)
 
 void ui_safety_page_set_tilt_ref(int16_t *tilt_enable)
 {
-  s_tilt_ref = tilt_enable;
-}
-
-int ui_safety_page_consume_tilt_changed(void)
-{
-  if(s_tilt_changed == false)
-  {
-    return -1;
-  }
-  s_tilt_changed = false;
-  if(s_tilt_ref == 0)
-  {
-    return -1;
-  }
-  return (*s_tilt_ref != 0) ? 1 : 0;
+  s_safety_state.tilt_ref = tilt_enable;
 }

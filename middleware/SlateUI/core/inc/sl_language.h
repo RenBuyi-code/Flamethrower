@@ -70,6 +70,12 @@ enum {
     SL_STR_CHECKING,       /**< "系统检测中" / "System Checking" */
     SL_STR_SAFETY_SET,     /**< "安全设置" / "Safety Set" */
     SL_STR_TILT,           /**< "倾斜保护" / "Tilt" */
+    SL_STR_CHARGING,       /**< "正在加压" / "Charging" */
+    SL_STR_E1_PRESSURE,    /**< "E1-加压故障" / "E1-Pressure Fault" */
+    SL_STR_E2_TILT_FAULT,  /**< "E2-机器倾倒" / "E2-Tilt Fault" */
+    SL_STR_E3_VOLTAGE,     /**< "E3-电压故障" / "E3-Voltage Fault" */
+    SL_STR_E4_LOCKED_FAULT,/**< "E4-系统上锁" / "E4-Locked" */
+    SL_STR_E5_RELIEF,      /**< "E5-泄压故障" / "E5-Relief Fault" */
     SL_STR_COUNT            /**< 字符串数量计数器，请勿手动赋值 */
 };
 

@@ -9,6 +9,7 @@
 #include "freertos_app.h"
 #include "../inc/at32f415_conf.h"
 #include "../../app/app_core.h"
+#include "../../app/ui_services.h"
 #include "../../app/log_rtt.h"
 #include "../../cfg/system_config.h"
 #include "../../domain/dmx_strategy.h"
@@ -20,9 +21,8 @@
 #define SL_PAGE_TRANSITION_MS 0
 
 #include "../../middleware/SlateUI/core/inc/sl_display.h"
-#include "../../middleware/SlateUI/core/inc/sl_event.h"
 #include "../../middleware/SlateUI/core/inc/sl_language.h"
-#include "../../middleware/SlateUI/core/inc/sl_page_manager.h"
+#include "../../middleware/SlateUI/core/inc/sl_ui.h"
 #include "../../middleware/SlateUI/font/sl_font.h"
 #include "../../middleware/SlateUI/port/sl_port.h"
 #include "../../middleware/SlateUI/menu/inc/sl_menu_model.h"
@@ -146,8 +146,27 @@ static uint32_t g_ui_perf_monotonic_us;
 static uint32_t g_ui_perf_cycles_per_us;
 static bool g_ui_perf_dwt_ready;
 static bool g_ui_menu_active;
+static bool g_ui_pages_registered;
+
+static const sl_PageEntry g_ui_pages[] =
+{
+  { "splash", ui_splash_page_get },
+  { "checking", ui_checking_page_get },
+  { "idle", ui_idle_page_get },
+  { "main_menu", ui_main_menu_get },
+  { "dmx_set", ui_setting_page_get_dmx },
+  { "pressure_set", ui_setting_page_get_pressure },
+  { "safety", ui_safety_page_get },
+  { "language", ui_language_page_get }
+};
 
 static void app_params_commit(void);
+static void ui_setting_on_dmx_addr_save(int16_t value);
+static void ui_setting_on_dmx_mode_save(int16_t value);
+static void ui_setting_on_ign_delay_save(int16_t value);
+static void ui_setting_on_lock_delay_save(int16_t value);
+static void ui_setting_on_tilt_enable_save(int16_t value);
+static void ui_setting_on_language_save(int16_t value);
 static void selftest_set_mode_state(bool user_mode, TickType_t now);
 static void run_startup_selftest(void);
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
@@ -515,38 +534,45 @@ static void send_safe_off_high_prio(void)
   queue_send_latest(q_actuator, &cmd, pdTRUE);
 }
 
-void ui_setting_on_dmx_addr_save(int16_t value)
+static void ui_setting_on_dmx_addr_save(int16_t value)
 {
   g_app.params.dmx_address = (uint16_t)value;
   APP_LOGI("dmx addr=%u", (unsigned)g_app.params.dmx_address);
   app_params_commit();
 }
 
-void ui_setting_on_dmx_mode_save(int16_t value)
+static void ui_setting_on_dmx_mode_save(int16_t value)
 {
   g_app.params.dmx_mode = (value == 1) ? DMX_MODE_6CH : DMX_MODE_2CH;
   APP_LOGI("dmx mode=%u", (unsigned)g_app.params.dmx_mode);
   app_params_commit();
 }
 
-void ui_setting_on_ign_delay_save(int16_t value)
+static void ui_setting_on_ign_delay_save(int16_t value)
 {
   g_app.params.igniter_delay_ms = (uint16_t)value;
   APP_LOGI("ign delay=%u", (unsigned)g_app.params.igniter_delay_ms);
   app_params_commit();
 }
 
-void ui_setting_on_lock_delay_save(int16_t value)
+static void ui_setting_on_lock_delay_save(int16_t value)
 {
   g_app.params.oil_lock_delay_ms = (uint16_t)value;
   APP_LOGI("lock delay=%u", (unsigned)g_app.params.oil_lock_delay_ms);
   app_params_commit();
 }
 
-void ui_setting_on_tilt_enable_save(int16_t value)
+static void ui_setting_on_tilt_enable_save(int16_t value)
 {
   g_app.params.tilt_protect_enable = (value != 0) ? true : false;
   APP_LOGI("tilt protect=%u", (unsigned)g_app.params.tilt_protect_enable);
+  app_params_commit();
+}
+
+static void ui_setting_on_language_save(int16_t value)
+{
+  g_app.params.language = (uint8_t)value;
+  APP_LOGI("language=%u", (unsigned)g_app.params.language);
   app_params_commit();
 }
 
@@ -586,13 +612,15 @@ static uint8_t ui_button_level_read(uint8_t button_id)
   }
 }
 
-static void ui_post_key_event(sl_EventType type, uint8_t source)
+static void ui_register_pages_once(void)
 {
-  sl_Event evt;
-  evt.type = type;
-  evt.param = 0;
-  evt.source = source;
-  (void)sl_event_post(&evt);
+  if(g_ui_pages_registered)
+  {
+    return;
+  }
+
+  sl_ui_registry_reset();
+  g_ui_pages_registered = sl_ui_register_pages(g_ui_pages, (uint8_t)(sizeof(g_ui_pages) / sizeof(g_ui_pages[0])));
 }
 
 static void ui_btn_click_cb(Button *btn, void *user_data)
@@ -608,16 +636,16 @@ static void ui_btn_click_cb(Button *btn, void *user_data)
   switch(btn->button_id)
   {
     case UI_BTN_ID_MENU:
-      ui_post_key_event(SL_EVT_KEY_BACK, SL_EVT_SOURCE_RAW);
+      sl_ui_post_key(SL_UI_KEY_BACK, true);
       break;
     case UI_BTN_ID_DOWN:
-      ui_post_key_event(SL_EVT_KEY_DOWN, SL_EVT_SOURCE_RAW);
+      sl_ui_post_key(SL_UI_KEY_DOWN, true);
       break;
     case UI_BTN_ID_UP:
-      ui_post_key_event(SL_EVT_KEY_UP, SL_EVT_SOURCE_RAW);
+      sl_ui_post_key(SL_UI_KEY_UP, true);
       break;
     case UI_BTN_ID_ENTER:
-      ui_post_key_event(SL_EVT_KEY_ENTER, SL_EVT_SOURCE_RAW);
+      sl_ui_post_key(SL_UI_KEY_ENTER, true);
       break;
     default:
       break;
@@ -634,16 +662,25 @@ static void ui_btn_repeat_cb(Button *btn, void *user_data)
 
   if(btn->button_id == UI_BTN_ID_DOWN)
   {
-    ui_post_key_event(SL_EVT_KEY_DOWN, SL_EVT_SOURCE_REPEAT);
+    sl_ui_post_key(SL_UI_KEY_DOWN, true);
   }
   else if(btn->button_id == UI_BTN_ID_UP)
   {
-    ui_post_key_event(SL_EVT_KEY_UP, SL_EVT_SOURCE_REPEAT);
+    sl_ui_post_key(SL_UI_KEY_UP, true);
   }
 }
 
 static void ui_setup_once(void)
 {
+  static const ui_setting_handlers_t s_ui_setting_handlers = {
+    ui_setting_on_dmx_addr_save,
+    ui_setting_on_dmx_mode_save,
+    ui_setting_on_ign_delay_save,
+    ui_setting_on_lock_delay_save,
+    ui_setting_on_tilt_enable_save,
+    ui_setting_on_language_save
+  };
+
   if(g_ui_btn.initialized)
   {
     return;
@@ -658,6 +695,7 @@ static void ui_setup_once(void)
   ui_setting_page_set_dmx_refs(&s_shadow_dmx_addr, &s_shadow_dmx_mode);
   ui_setting_page_set_pressure_refs(&s_shadow_ign_delay, &s_shadow_lock_delay);
   ui_safety_page_set_tilt_ref(&s_shadow_tilt_enable);
+  ui_service_bind_setting_handlers(&s_ui_setting_handlers);
 
   sl_port_init();
   sl_port_input_init();
@@ -691,7 +729,8 @@ static void ui_setup_once(void)
   sl_disp_init();
   sl_disp_fill_rect(0, 0, SL_DISP_WIDTH, 32, 1);
   sl_disp_flush();
-  sl_page_manager_init(ui_splash_page_get());
+  ui_register_pages_once();
+  sl_ui_init("splash");
 
   g_ui_btn.initialized = true;
   APP_LOGI("ui setup done");
@@ -739,6 +778,17 @@ static void run_startup_selftest(void)
     tilt_fault = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_TILT_SWITCH);
     pressure_raw = g_app.hal.adc.read_raw(g_app.hal.adc.ctx, SENSOR_PRESSURE);
     pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
+
+    if(cfg_pressure_sensor_fault(pressure_raw))
+    {
+      fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
+      APP_LOGW("pressure sensor fault in selftest: raw=%u", (unsigned)pressure_raw);
+      send_safe_off_high_prio();
+      (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2009U, (uint32_t)now);
+      set_fault_bits(g_app.faults.latched_mask);
+      set_state_bits(g_app.machine.current);
+      return;
+    }
 
     if(g_app.params.tilt_protect_enable && tilt_fault)
     {
@@ -810,7 +860,13 @@ void safety_task(void *pvParameters)
     have_status = xQueuePeek(q_actuator_status, &st, 0);
     bits = xEventGroupGetBits(eg_system);
 
-    if((have_status == pdTRUE) &&
+    if(cfg_pressure_sensor_fault(pressure_raw))
+    {
+      e1_start = 0U;
+      fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
+      APP_LOGW("pressure sensor fault: raw=%u", (unsigned)pressure_raw);
+    }
+    else if((have_status == pdTRUE) &&
        st.out.oil_pump_on &&
        (st.fire_active == false) &&
        (st.relief_active == false) &&
@@ -828,7 +884,9 @@ void safety_task(void *pvParameters)
     else
     {
       e1_start = 0U;
-      fault_manager_try_clear(&g_app.faults, FAULT_E1_PRESSURE_BUILD, pressure_pct >= CFG_PRESSURE_TARGET_PCT);
+      fault_manager_try_clear(&g_app.faults, FAULT_E1_PRESSURE_BUILD,
+                              (cfg_pressure_sensor_fault(pressure_raw) == false) &&
+                              (pressure_pct >= CFG_PRESSURE_TARGET_PCT));
     }
 
     if(g_app.params.tilt_protect_enable && tilt_fault)
@@ -987,6 +1045,19 @@ void control_task(void *pvParameters)
     pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
     in.pressure_pct = pressure_pct;
     in.pressure_fire_min_pct = CFG_PRESSURE_FIRE_MIN_PCT;
+
+    if(cfg_pressure_sensor_fault(pressure_raw))
+    {
+      fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
+      set_fault_bits(g_app.faults.latched_mask);
+      APP_LOGW("pressure sensor fault in control: raw=%u", (unsigned)pressure_raw);
+      send_safe_off_high_prio();
+      (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2205U, (uint32_t)now);
+      set_state_bits(g_app.machine.current);
+      (void)xEventGroupSetBits(eg_system, EVT_HB_CONTROL_BIT);
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
 
     cmd.priority = 1U;
     cmd.igniter_delay_ms = g_app.params.igniter_delay_ms;
@@ -1306,23 +1377,13 @@ void dmx_task(void *pvParameters)
 
 void ui_task(void *pvParameters)
 {
-  typedef enum
-  {
-    UI_FLOW_SPLASH = 0,
-    UI_FLOW_CHECKING,
-    UI_FLOW_IDLE
-  } ui_flow_stage_t;
-
-  static ui_flow_stage_t s_ui_flow_stage = UI_FLOW_SPLASH;
-  TickType_t splash_start_tick;
-  TickType_t checking_start_tick;
   (void)pvParameters;
   ui_setup_once();
-  s_ui_flow_stage = UI_FLOW_SPLASH;
-  splash_start_tick = xTaskGetTickCount();
-  checking_start_tick = splash_start_tick;
   for(;;)
   {
+    uint8_t tick_i;
+    const char *page_name;
+
     button_ticks();
 
     {
@@ -1331,12 +1392,15 @@ void ui_task(void *pvParameters)
       uint8_t pressure_pct;
       bool dmx_online;
       machine_state_t st;
+      ui_machine_snapshot_t snap;
+      bool snapshot_changed;
 
       bits = xEventGroupGetBits(eg_system);
       pressure_raw = g_app.hal.adc.read_raw(g_app.hal.adc.ctx, SENSOR_PRESSURE);
       pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
       dmx_online = ((bits & EVT_DMX_ONLINE_BIT) != 0U);
       st = g_app.machine.current;
+      snapshot_changed = false;
 
       {
         actuator_status_t act_st;
@@ -1345,98 +1409,31 @@ void ui_task(void *pvParameters)
 
         act_ok = xQueuePeek(q_actuator_status, &act_st, 0);
         pumping = ((act_ok == pdTRUE) && act_st.out.oil_pump_on && (act_st.fire_active == false) && (act_st.relief_active == false));
-        ui_idle_page_update(st, dmx_online, pumping, pressure_pct, g_app.faults.latched_mask, g_app.params.dmx_address);
+        snap.state = st;
+        snap.pressure_pct = pressure_pct;
+        snap.dmx_addr = g_app.params.dmx_address;
+        snap.fault_mask = g_app.faults.latched_mask;
+        snap.dmx_online = dmx_online;
+        snap.pumping = pumping;
+        snapshot_changed = ui_service_set_machine_snapshot(&snap);
       }
-      ui_checking_page_update(st, pressure_pct, g_app.faults.latched_mask);
-    }
-
-      sl_page_manager_process();
-      sl_page_manager_tick((uint16_t)TICKS_INTERVAL);
-
-      ui_splash_page_tick();
-      if(s_ui_flow_stage == UI_FLOW_SPLASH)
+      if(snapshot_changed)
       {
-        TickType_t now_tick = xTaskGetTickCount();
-        TickType_t splash_elapsed_tick = now_tick - splash_start_tick;
-
-        if((splash_elapsed_tick >= pdMS_TO_TICKS(2000U)) && ui_splash_page_is_done())
-        {
-          uint32_t splash_elapsed_ms = (uint32_t)(splash_elapsed_tick * portTICK_PERIOD_MS);
-          s_ui_flow_stage = UI_FLOW_CHECKING;
-          checking_start_tick = now_tick;
-          APP_LOGI("ui page: splash -> checking (%lums)", splash_elapsed_ms);
-          sl_page_enter(ui_checking_page_get());
-        }
-      }
-      else if(s_ui_flow_stage == UI_FLOW_CHECKING)
-      {
-        TickType_t now_tick = xTaskGetTickCount();
-        TickType_t checking_elapsed_tick = now_tick - checking_start_tick;
-
-        if((checking_elapsed_tick >= pdMS_TO_TICKS(5000U)) && ui_checking_page_is_done())
-        {
-          uint32_t checking_elapsed_ms = (uint32_t)(checking_elapsed_tick * portTICK_PERIOD_MS);
-          s_ui_flow_stage = UI_FLOW_IDLE;
-          APP_LOGI("ui page: checking -> idle (%lums)", checking_elapsed_ms);
-          sl_page_enter(ui_idle_page_get());
-        }
-      }
-
-    if(ui_main_menu_consume_back_to_idle())
-    {
-      APP_LOGI("ui page: back to idle");
-      g_ui_menu_active = false;
-    }
-
-    if(ui_idle_page_consume_enter_menu())
-    {
-      APP_LOGI("ui page: idle -> main_menu");
-      g_ui_menu_active = true;
-      sl_page_enter(ui_main_menu_get());
-    }
-
-    {
-      int lang = ui_language_page_consume_selection();
-      if(lang >= 0)
-      {
-        APP_LOGI("ui lang: switched to %d", lang);
-        g_app.params.language = (uint8_t)lang;
-        app_params_commit();
+        sl_ui_request_redraw();
       }
     }
 
-    {
-      int tilt = ui_safety_page_consume_tilt_changed();
-      if(tilt >= 0)
+      for(tick_i = 0U; tick_i < (uint8_t)TICKS_INTERVAL; tick_i++)
       {
-        ui_setting_on_tilt_enable_save((int16_t)tilt);
+        sl_ui_tick_up();
       }
-    }
+      sl_ui_run_once();
 
-    if(g_ui_menu_active)
-    {
-      int sel = ui_main_menu_consume_selected();
-      if(sel == UI_MENU_ITEM_DMX)
-      {
-        APP_LOGI("ui page: main_menu -> dmx_set");
-        sl_page_enter(ui_setting_page_get_dmx());
-      }
-      else if(sel == UI_MENU_ITEM_PRESSURE)
-      {
-        APP_LOGI("ui page: main_menu -> pressure_set");
-        sl_page_enter(ui_setting_page_get_pressure());
-      }
-      else if(sel == UI_MENU_ITEM_TILT)
-      {
-        APP_LOGI("ui page: main_menu -> tilt");
-        sl_page_enter(ui_safety_page_get());
-      }
-      else if(sel == UI_MENU_ITEM_LANGUAGE)
-      {
-        APP_LOGI("ui page: main_menu -> language");
-        sl_page_enter(ui_language_page_get());
-      }
-    }
+    page_name = sl_ui_current_page();
+    g_ui_menu_active = ((page_name != 0) &&
+                        (strcmp(page_name, "idle") != 0) &&
+                        (strcmp(page_name, "checking") != 0) &&
+                        (strcmp(page_name, "splash") != 0));
 
     (void)xEventGroupSetBits(eg_system, EVT_HB_UI_BIT);
     vTaskDelay(pdMS_TO_TICKS(TICKS_INTERVAL));
@@ -1529,6 +1526,7 @@ void wk_freertos_init(void)
 #include "../../domain/safety_guard.c"
 #include "../../domain/dmx_strategy.c"
 #include "../../app/app_core.c"
+#include "../../app/ui_services.c"
 #include "../../bsp/at32f415/bsp_uart.c"
 #include "../../bsp/at32f415/bsp_at32f415.c"
 #define ST7920_COMMAND_CMD_DELAY        10
@@ -1542,7 +1540,9 @@ void wk_freertos_init(void)
 #include "../../middleware/SlateUI/core/src/sl_key_repeat.c"
 #include "../../middleware/SlateUI/core/src/sl_language.c"
 #include "../../middleware/SlateUI/core/src/sl_page_manager.c"
+#include "../../middleware/SlateUI/core/src/sl_page_registry.c"
 #include "../../middleware/SlateUI/core/src/sl_tween.c"
+#include "../../middleware/SlateUI/core/src/sl_ui.c"
 #include "../../middleware/SlateUI/widgets/src/sl_widget.c"
 #include "../../middleware/SlateUI/widgets/src/sl_label.c"
 #include "../../middleware/SlateUI/widgets/src/sl_list_view.c"

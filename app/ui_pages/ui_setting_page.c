@@ -1,19 +1,13 @@
 #include "ui_setting_page.h"
+#include "../ui_services.h"
 #include "../../middleware/SlateUI/core/inc/sl_display.h"
-#include "../../middleware/SlateUI/core/inc/sl_page_manager.h"
+#include "../../middleware/SlateUI/core/inc/sl_ui.h"
 #include "../../middleware/SlateUI/core/inc/sl_language.h"
 #include "../../middleware/SlateUI/font/sl_font_chinese_16x16.h"
 #include <string.h>
 #include <stdio.h>
 
-#define UI_DISP_W          122
-#define UI_CHAR_W          8
 #define UI_CHAR_H          16
-
-extern void ui_setting_on_dmx_addr_save(int16_t value);
-extern void ui_setting_on_dmx_mode_save(int16_t value);
-extern void ui_setting_on_ign_delay_save(int16_t value);
-extern void ui_setting_on_lock_delay_save(int16_t value);
 
 static const char *s_dmx_mode_choices[] = { "2CH", "6CH" };
 
@@ -32,6 +26,11 @@ typedef struct
 
 static ui_setting_priv_t s_dmx_priv;
 static ui_setting_priv_t s_pressure_priv;
+
+static ui_setting_priv_t *uis_state(sl_Page *self)
+{
+  return SL_PAGE_DATA_AS(ui_setting_priv_t, self);
+}
 
 static void uis_format_value(char *buf, int buf_size, const ui_setting_field_t *f, int16_t val)
 {
@@ -57,7 +56,7 @@ static void uis_format_value(char *buf, int buf_size, const ui_setting_field_t *
 
 static void setting_draw(sl_Page *self)
 {
-  ui_setting_priv_t *priv = (ui_setting_priv_t *)self->data;
+  ui_setting_priv_t *priv = uis_state(self);
   const ui_setting_cfg_t *cfg = priv->cfg;
   char val_buf[16];
   char line_buf[20];
@@ -116,7 +115,7 @@ static int uis_clamp_value(const ui_setting_field_t *f, int16_t val)
 
 static int setting_proc(sl_Page *self, const sl_Event *evt)
 {
-  ui_setting_priv_t *priv = (ui_setting_priv_t *)self->data;
+  ui_setting_priv_t *priv = uis_state(self);
   const ui_setting_cfg_t *cfg = priv->cfg;
 
   if(priv->editing != 0)
@@ -134,7 +133,7 @@ static int setting_proc(sl_Page *self, const sl_Event *evt)
         {
           priv->edit_value = (int16_t)uis_clamp_value(f, (int16_t)((int)priv->edit_value + (int)f->step));
         }
-        sl_page_request_redraw();
+        sl_ui_request_redraw();
         break;
       }
 
@@ -149,7 +148,7 @@ static int setting_proc(sl_Page *self, const sl_Event *evt)
         {
           priv->edit_value = (int16_t)uis_clamp_value(f, (int16_t)((int)priv->edit_value - (int)f->step));
         }
-        sl_page_request_redraw();
+        sl_ui_request_redraw();
         break;
       }
 
@@ -165,13 +164,13 @@ static int setting_proc(sl_Page *self, const sl_Event *evt)
           }
         }
         priv->editing = 0;
-        sl_page_request_redraw();
+        sl_ui_request_redraw();
         break;
       }
 
       case SL_EVT_KEY_BACK:
         priv->editing = 0;
-        sl_page_request_redraw();
+        sl_ui_request_redraw();
         break;
 
       default:
@@ -184,12 +183,12 @@ static int setting_proc(sl_Page *self, const sl_Event *evt)
     {
       case SL_EVT_KEY_UP:
         priv->focus = (priv->focus == 0) ? 1 : 0;
-        sl_page_request_redraw();
+        sl_ui_request_redraw();
         break;
 
       case SL_EVT_KEY_DOWN:
         priv->focus = (priv->focus == 1) ? 0 : 1;
-        sl_page_request_redraw();
+        sl_ui_request_redraw();
         break;
 
       case SL_EVT_KEY_ENTER:
@@ -197,7 +196,7 @@ static int setting_proc(sl_Page *self, const sl_Event *evt)
         const ui_setting_field_t *f = &cfg->fields[priv->focus];
         priv->editing = 1;
         priv->edit_value = (f->value != 0) ? *(f->value) : 0;
-        sl_page_request_redraw();
+        sl_ui_request_redraw();
         break;
       }
 
@@ -214,7 +213,7 @@ static int setting_proc(sl_Page *self, const sl_Event *evt)
 
 static void setting_init(sl_Page *self)
 {
-  ui_setting_priv_t *priv = (ui_setting_priv_t *)self->data;
+  ui_setting_priv_t *priv = uis_state(self);
 
   priv->focus = 0;
   priv->editing = 0;
@@ -232,7 +231,7 @@ static void dmx_cfg_init(void)
   s_dmx_cfg.fields[0].step = 1;
   s_dmx_cfg.fields[0].choices = 0;
   s_dmx_cfg.fields[0].choice_cnt = 0;
-  s_dmx_cfg.fields[0].on_save = ui_setting_on_dmx_addr_save;
+  s_dmx_cfg.fields[0].on_save = ui_service_save_dmx_addr;
 
   s_dmx_cfg.fields[1].label = 0;
   s_dmx_cfg.fields[1].label_id = SL_STR_MODE;
@@ -241,7 +240,7 @@ static void dmx_cfg_init(void)
   s_dmx_cfg.fields[1].step = 1;
   s_dmx_cfg.fields[1].choices = s_dmx_mode_choices;
   s_dmx_cfg.fields[1].choice_cnt = 2;
-  s_dmx_cfg.fields[1].on_save = ui_setting_on_dmx_mode_save;
+  s_dmx_cfg.fields[1].on_save = ui_service_save_dmx_mode;
 }
 
 static void pressure_cfg_init(void)
@@ -255,7 +254,7 @@ static void pressure_cfg_init(void)
   s_pressure_cfg.fields[0].step = 10;
   s_pressure_cfg.fields[0].choices = 0;
   s_pressure_cfg.fields[0].choice_cnt = 0;
-  s_pressure_cfg.fields[0].on_save = ui_setting_on_ign_delay_save;
+  s_pressure_cfg.fields[0].on_save = ui_service_save_ign_delay;
 
   s_pressure_cfg.fields[1].label = 0;
   s_pressure_cfg.fields[1].label_id = SL_STR_LOCK;
@@ -264,7 +263,7 @@ static void pressure_cfg_init(void)
   s_pressure_cfg.fields[1].step = 10;
   s_pressure_cfg.fields[1].choices = 0;
   s_pressure_cfg.fields[1].choice_cnt = 0;
-  s_pressure_cfg.fields[1].on_save = ui_setting_on_lock_delay_save;
+  s_pressure_cfg.fields[1].on_save = ui_service_save_lock_delay;
 }
 
 static sl_Page *uis_page_setup(sl_Page *page, ui_setting_priv_t *priv, ui_setting_cfg_t *cfg)
@@ -277,6 +276,7 @@ static sl_Page *uis_page_setup(sl_Page *page, ui_setting_priv_t *priv, ui_settin
     page->proc = setting_proc;
     page->exit = 0;
     page->presenter = 0;
+    page->tick = 0;
     page->data = priv;
     page->arg = 0;
 

@@ -16,6 +16,14 @@
 #define SL_DISPLAY_H
 
 #include <stdint.h>
+#include "../../font/sl_font.h"
+
+typedef struct
+{
+    uint16_t x;
+    const char *text;
+    const void *font;
+} sl_TextSegment;
 
 /* ======================== 屏幕尺寸配置 ======================== */
 
@@ -97,6 +105,10 @@ void     sl_disp_draw_bitmap_1bpp(int x, int y, int w, int h,
  */
 uint16_t sl_disp_draw_string(uint16_t x, uint16_t y, const char *str,
                              const void *font, uint8_t color);
+
+uint16_t sl_text_measure_width(const char *str, const void *font);
+uint16_t sl_text_draw_center(uint16_t y, const char *str, const void *font, uint8_t color);
+void sl_text_draw_segments(uint16_t y, const sl_TextSegment *segments, uint8_t count, uint8_t color);
 
 /**
  * @brief  将脏矩形区域刷新到物理屏幕

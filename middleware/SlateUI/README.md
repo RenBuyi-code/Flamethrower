@@ -464,9 +464,9 @@ slides out while the new page slides in, using an ease-out curve.
 
 Transition duration is configurable: `SL_PAGE_TRANSITION_MS` (default 150ms).
 
-Call `sl_page_manager_tick(delta_ms)` from your timer callback to drive the
-transition. During a transition, event processing is locked to prevent
-accidental input.
+For new integrations, call `sl_ui_tick_up()` from your timer callback and
+`sl_ui_run_once()` from the main loop or UI task. SlateUI will advance the
+transition internally and keep input locked during active page switches.
 
 ## Scroll Indicator
 

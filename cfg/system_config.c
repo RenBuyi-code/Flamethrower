@@ -70,6 +70,11 @@ bool cfg_voltage_raw_in_range(uint16_t raw)
 #endif
 }
 
+bool cfg_pressure_sensor_fault(uint16_t raw)
+{
+  return (raw < CFG_PRESSURE_ADC_MIN_RAW);
+}
+
 uint8_t cfg_pressure_raw_to_percent(uint16_t raw)
 {
   uint32_t num;

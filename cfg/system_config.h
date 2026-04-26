@@ -47,6 +47,7 @@
 void cfg_get_default_params(system_params_t *params);
 void cfg_sanitize_params(system_params_t *params);
 bool cfg_voltage_raw_in_range(uint16_t raw);
+bool cfg_pressure_sensor_fault(uint16_t raw);
 uint8_t cfg_pressure_raw_to_percent(uint16_t raw);
 
 #endif

@@ -1,6 +1,18 @@
 #include "app_core.h"
 #include "log_rtt.h"
 
+/*
+ * Keep app_core intentionally thin.
+ *
+ * app_core gathers shared application state,
+ * while domain rules stay in domain/ and task code.
+ *
+ * That keeps:
+ * - one clear system truth
+ * - one small debug entry point
+ * - no accidental UI-specific logic inside the app core
+ */
+
 void app_core_init(app_core_t *core)
 {
   if(core == 0)
@@ -27,6 +39,7 @@ void app_core_load_or_default_params(app_core_t *core)
     cfg_get_default_params(&core->params);
     APP_LOGW("params load failed, use defaults");
   }
+
   cfg_sanitize_params(&core->params);
   APP_LOGI("params: addr=%u mode=%u ign=%u lock=%u tilt=%u",
            (unsigned)core->params.dmx_address,
@@ -42,6 +55,7 @@ void app_core_log(app_core_t *core, uint16_t code, uint32_t ts_ms)
   {
     return;
   }
+
   event_log_push(&core->events, code, ts_ms);
 }
 
@@ -49,10 +63,12 @@ bool app_core_switch_state(app_core_t *core, machine_state_t next, uint16_t even
 {
   bool ok;
   machine_state_t from;
+
   if(core == 0)
   {
     return false;
   }
+
   from = core->machine.current;
   if(from == next)
   {
@@ -76,5 +92,6 @@ bool app_core_switch_state(app_core_t *core, machine_state_t next, uint16_t even
              (unsigned)next,
              (unsigned)event_code);
   }
+
   return ok;
 }

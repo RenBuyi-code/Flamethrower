@@ -226,6 +226,66 @@ uint16_t sl_disp_draw_string(uint16_t x, uint16_t y, const char *str,
     return sl_font_draw_internal(x, y, str, font, color);
 }
 
+uint16_t sl_text_measure_width(const char *str, const void *font) {
+    const sl_Font *f = (const sl_Font *)(font ? font : &sl_default_font);
+    const unsigned char *p = (const unsigned char *)str;
+    uint16_t width = 0U;
+
+    if (p == NULL) {
+        return 0U;
+    }
+
+    while (*p != '\0') {
+        if (f == &sl_font_chinese) {
+            if (*p < 0x80U) {
+                width = (uint16_t)(width + 8U);
+                p += 1;
+            } else if (((*p & 0xF0U) == 0xE0U) && (p[1] != '\0') && (p[2] != '\0')) {
+                width = (uint16_t)(width + 16U);
+                p += 3;
+            } else if (((*p & 0xE0U) == 0xC0U) && (p[1] != '\0')) {
+                width = (uint16_t)(width + 16U);
+                p += 2;
+            } else {
+                width = (uint16_t)(width + 16U);
+                p += 1;
+            }
+        } else {
+            width = (uint16_t)(width + f->width);
+            p += 1;
+        }
+    }
+
+    return width;
+}
+
+uint16_t sl_text_draw_center(uint16_t y, const char *str, const void *font, uint8_t color) {
+    uint16_t width = sl_text_measure_width(str, font);
+    uint16_t x = 0U;
+
+    if (width < SL_DISP_WIDTH) {
+        x = (uint16_t)((SL_DISP_WIDTH - width) / 2U);
+    }
+
+    (void)sl_disp_draw_string(x, y, str, font, color);
+    return x;
+}
+
+void sl_text_draw_segments(uint16_t y, const sl_TextSegment *segments, uint8_t count, uint8_t color) {
+    uint8_t i;
+
+    if ((segments == NULL) || (count == 0U)) {
+        return;
+    }
+
+    for (i = 0U; i < count; i++) {
+        if (segments[i].text == NULL) {
+            continue;
+        }
+        (void)sl_disp_draw_string(segments[i].x, y, segments[i].text, segments[i].font, color);
+    }
+}
+
 /**
  * @brief  将脏矩形区域刷新到物理屏幕
  *

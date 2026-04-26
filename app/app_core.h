@@ -9,6 +9,23 @@
 #include "../domain/fault_manager.h"
 #include "../domain/machine_state.h"
 
+/*
+ * app_core
+ *
+ * Project-level application core for the Flamethrower firmware.
+ * This is not part of SlateUI.
+ *
+ * It owns the shared application truth:
+ * - HAL bindings
+ * - machine state
+ * - fault manager
+ * - event log
+ * - active settings
+ *
+ * Tasks can share one consistent runtime context through this struct.
+ * Another project can use SlateUI without copying app_core.
+ */
+
 typedef struct
 {
   bsp_hal_bundle_t hal;
