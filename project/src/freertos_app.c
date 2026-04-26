@@ -9,89 +9,26 @@
 #include "freertos_app.h"
 #include "../inc/at32f415_conf.h"
 #include "../../app/app_core.h"
+#include "../../app/app_task_common.h"
+#include "../../app/app_task_shared.h"
 #include "../../app/ui_services.h"
+#include "../../app/task_safety/task_safety.h"
+#include "../../app/task_control/task_control.h"
+#include "../../app/task_ui/task_ui.h"
+#include "../../app/task_dmx/task_dmx.h"
 #include "../../app/log_rtt.h"
 #include "../../cfg/system_config.h"
 #include "../../domain/dmx_strategy.h"
 #include "../../domain/fault_manager.h"
 #include "../../domain/safety_guard.h"
 #include "../../middleware/easyDMX/easy_dmx.h"
-#include "../../middleware/MultiButton/multi_button.h"
-
-#define SL_PAGE_TRANSITION_MS 0
-
-#include "../../middleware/SlateUI/core/inc/sl_display.h"
-#include "../../middleware/SlateUI/core/inc/sl_language.h"
-#include "../../middleware/SlateUI/core/inc/sl_ui.h"
-#include "../../middleware/SlateUI/font/sl_font.h"
-#include "../../middleware/SlateUI/port/sl_port.h"
-#include "../../middleware/SlateUI/menu/inc/sl_menu_model.h"
-#include "../../middleware/SlateUI/menu/inc/sl_menu_page.h"
-#include "../../app/ui_pages/ui_idle_page.h"
-#include "../../app/ui_pages/ui_main_menu.h"
-#include "../../app/ui_pages/ui_safety_page.h"
-#include "../../app/ui_pages/ui_setting_page.h"
-#include "../../app/ui_pages/ui_language_page.h"
-#include "../../app/ui_pages/ui_splash_page.h"
-#include "../../app/ui_pages/ui_checking_page.h"
 #include <string.h>
-
-typedef enum
-{
-  ACT_CMD_SAFE_OFF = 0,
-  ACT_CMD_RELIEF,
-  ACT_CMD_FIRE,
-  ACT_CMD_PUMP_ONLY
-} actuator_cmd_type_t;
-
-typedef struct
-{
-  actuator_cmd_type_t type;
-  uint8_t priority;
-  bool user_mode;
-  uint16_t igniter_delay_ms;
-  uint16_t oil_lock_delay_ms;
-  uint16_t fire_duration_ms;
-} actuator_cmd_t;
-
-typedef struct
-{
-  actuator_output_t out;
-  uint32_t tick_ms;
-  bool fire_active;
-  bool relief_active;
-} actuator_status_t;
 
 /* watchdog switch: keep disabled during debug bring-up */
 #define APP_WDT_ENABLE                    0U
 #define APP_WDT_DIVIDER                   WDT_CLK_DIV_256
 #define APP_WDT_RELOAD                    1000U
 #define APP_DOMAIN_SELFTEST_ENABLE        1U
-
-enum
-{
-  EVT_STATE_READY_BIT = (1UL << 0),
-  EVT_STATE_FIRING_BIT = (1UL << 1),
-  EVT_STATE_RELIEF_BIT = (1UL << 2),
-  EVT_STATE_FAULT_BIT = (1UL << 3),
-  EVT_STATE_LOCKED_BIT = (1UL << 4),
-
-  EVT_DMX_ONLINE_BIT = (1UL << 5),
-  EVT_FAULT_E1_BIT = (1UL << 6),
-  EVT_FAULT_E2_BIT = (1UL << 7),
-  EVT_FAULT_E3_BIT = (1UL << 8),
-  EVT_FAULT_E4_BIT = (1UL << 9),
-  EVT_FAULT_E5_BIT = (1UL << 10),
-
-  EVT_HB_SAFETY_BIT = (1UL << 11),
-  EVT_HB_CONTROL_BIT = (1UL << 12),
-  EVT_HB_ACTUATOR_BIT = (1UL << 13),
-  EVT_HB_DMX_BIT = (1UL << 14),
-  EVT_HB_UI_BIT = (1UL << 15),
-  EVT_HB_DIAG_BIT = (1UL << 16),
-
-  EVT_HB_MASK = EVT_HB_SAFETY_BIT | EVT_HB_CONTROL_BIT | EVT_HB_ACTUATOR_BIT | EVT_HB_DMX_BIT | EVT_HB_UI_BIT
-};
 
 /* task handler */
 TaskHandle_t safety_handle;
@@ -135,40 +72,13 @@ static app_core_t g_app;
 static edmx_rx_t s_dmx_rx;
 static uint8_t s_dmx_fifo_storage[1024];
 
-static int16_t s_shadow_dmx_addr;
-static int16_t s_shadow_dmx_mode;
-static int16_t s_shadow_ign_delay;
-static int16_t s_shadow_lock_delay;
-static int16_t s_shadow_tilt_enable;
-
 static uint32_t g_ui_perf_last_cycles;
 static uint32_t g_ui_perf_monotonic_us;
 static uint32_t g_ui_perf_cycles_per_us;
 static bool g_ui_perf_dwt_ready;
 static bool g_ui_menu_active;
-static bool g_ui_pages_registered;
-
-static const sl_PageEntry g_ui_pages[] =
-{
-  { "splash", ui_splash_page_get },
-  { "checking", ui_checking_page_get },
-  { "idle", ui_idle_page_get },
-  { "main_menu", ui_main_menu_get },
-  { "dmx_set", ui_setting_page_get_dmx },
-  { "pressure_set", ui_setting_page_get_pressure },
-  { "safety", ui_safety_page_get },
-  { "language", ui_language_page_get }
-};
 
 static void app_params_commit(void);
-static void ui_setting_on_dmx_addr_save(int16_t value);
-static void ui_setting_on_dmx_mode_save(int16_t value);
-static void ui_setting_on_ign_delay_save(int16_t value);
-static void ui_setting_on_lock_delay_save(int16_t value);
-static void ui_setting_on_tilt_enable_save(int16_t value);
-static void ui_setting_on_language_save(int16_t value);
-static void selftest_set_mode_state(bool user_mode, TickType_t now);
-static void run_startup_selftest(void);
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
                                    StackType_t **ppxIdleTaskStackBuffer,
@@ -416,818 +326,6 @@ static void app_run_domain_selftests(void)
 #endif
 }
 
-typedef enum
-{
-  TEST_ACT_SAFE_OFF = 0,
-  TEST_ACT_PUMP_ONLY,
-  TEST_ACT_RELIEF,
-  TEST_ACT_FIRE
-} test_action_t;
-static void queue_send_latest(QueueHandle_t q, const actuator_cmd_t *cmd, BaseType_t to_front)
-{
-  actuator_cmd_t dropped;
-  if((q == 0) || (cmd == 0))
-  {
-    return;
-  }
-
-  if(to_front != pdFALSE)
-  {
-    if(xQueueSendToFront(q, cmd, 0) == pdPASS)
-    {
-      return;
-    }
-  }
-  else
-  {
-    if(xQueueSend(q, cmd, 0) == pdPASS)
-    {
-      return;
-    }
-  }
-
-  (void)xQueueReceive(q, &dropped, 0);
-  if(to_front != pdFALSE)
-  {
-    (void)xQueueSendToFront(q, cmd, 0);
-  }
-  else
-  {
-    (void)xQueueSend(q, cmd, 0);
-  }
-}
-
-static void set_state_bits(machine_state_t st)
-{
-  EventBits_t clear_mask;
-  EventBits_t set_mask;
-  clear_mask = EVT_STATE_READY_BIT | EVT_STATE_FIRING_BIT | EVT_STATE_RELIEF_BIT | EVT_STATE_FAULT_BIT | EVT_STATE_LOCKED_BIT;
-  set_mask = 0U;
-
-  switch(st)
-  {
-    case MACHINE_READY:
-      set_mask = EVT_STATE_READY_BIT;
-      break;
-    case MACHINE_FIRING:
-      set_mask = EVT_STATE_FIRING_BIT;
-      break;
-    case MACHINE_RELIEF:
-      set_mask = EVT_STATE_RELIEF_BIT;
-      break;
-    case MACHINE_FAULT:
-      set_mask = EVT_STATE_FAULT_BIT;
-      break;
-    case MACHINE_LOCKED:
-      set_mask = EVT_STATE_LOCKED_BIT;
-      break;
-    default:
-      break;
-  }
-
-  (void)xEventGroupClearBits(eg_system, clear_mask);
-  if(set_mask != 0U)
-  {
-    (void)xEventGroupSetBits(eg_system, set_mask);
-  }
-}
-
-static void set_fault_bits(uint32_t mask)
-{
-  EventBits_t clear_mask;
-  EventBits_t set_mask;
-  clear_mask = EVT_FAULT_E1_BIT | EVT_FAULT_E2_BIT | EVT_FAULT_E3_BIT | EVT_FAULT_E4_BIT | EVT_FAULT_E5_BIT;
-  set_mask = 0U;
-  if((mask & FAULT_MASK_E1) != 0U) { set_mask |= EVT_FAULT_E1_BIT; }
-  if((mask & FAULT_MASK_E2) != 0U) { set_mask |= EVT_FAULT_E2_BIT; }
-  if((mask & FAULT_MASK_E3) != 0U) { set_mask |= EVT_FAULT_E3_BIT; }
-  if((mask & FAULT_MASK_E4) != 0U) { set_mask |= EVT_FAULT_E4_BIT; }
-  if((mask & FAULT_MASK_E5) != 0U) { set_mask |= EVT_FAULT_E5_BIT; }
-  (void)xEventGroupClearBits(eg_system, clear_mask);
-  if(set_mask != 0U)
-  {
-    (void)xEventGroupSetBits(eg_system, set_mask);
-  }
-}
-
-static uint32_t read_fault_mask_from_events(EventBits_t bits)
-{
-  uint32_t mask;
-  mask = 0U;
-  if((bits & EVT_FAULT_E1_BIT) != 0U) { mask |= FAULT_MASK_E1; }
-  if((bits & EVT_FAULT_E2_BIT) != 0U) { mask |= FAULT_MASK_E2; }
-  if((bits & EVT_FAULT_E3_BIT) != 0U) { mask |= FAULT_MASK_E3; }
-  if((bits & EVT_FAULT_E4_BIT) != 0U) { mask |= FAULT_MASK_E4; }
-  if((bits & EVT_FAULT_E5_BIT) != 0U) { mask |= FAULT_MASK_E5; }
-  return mask;
-}
-
-static void send_safe_off_high_prio(void)
-{
-  actuator_cmd_t cmd;
-  cmd.type = ACT_CMD_SAFE_OFF;
-  cmd.priority = 10U;
-  cmd.user_mode = false;
-  cmd.igniter_delay_ms = 0U;
-  cmd.oil_lock_delay_ms = 0U;
-  cmd.fire_duration_ms = 0U;
-  queue_send_latest(q_actuator, &cmd, pdTRUE);
-}
-
-static void ui_setting_on_dmx_addr_save(int16_t value)
-{
-  g_app.params.dmx_address = (uint16_t)value;
-  APP_LOGI("dmx addr=%u", (unsigned)g_app.params.dmx_address);
-  app_params_commit();
-}
-
-static void ui_setting_on_dmx_mode_save(int16_t value)
-{
-  g_app.params.dmx_mode = (value == 1) ? DMX_MODE_6CH : DMX_MODE_2CH;
-  APP_LOGI("dmx mode=%u", (unsigned)g_app.params.dmx_mode);
-  app_params_commit();
-}
-
-static void ui_setting_on_ign_delay_save(int16_t value)
-{
-  g_app.params.igniter_delay_ms = (uint16_t)value;
-  APP_LOGI("ign delay=%u", (unsigned)g_app.params.igniter_delay_ms);
-  app_params_commit();
-}
-
-static void ui_setting_on_lock_delay_save(int16_t value)
-{
-  g_app.params.oil_lock_delay_ms = (uint16_t)value;
-  APP_LOGI("lock delay=%u", (unsigned)g_app.params.oil_lock_delay_ms);
-  app_params_commit();
-}
-
-static void ui_setting_on_tilt_enable_save(int16_t value)
-{
-  g_app.params.tilt_protect_enable = (value != 0) ? true : false;
-  APP_LOGI("tilt protect=%u", (unsigned)g_app.params.tilt_protect_enable);
-  app_params_commit();
-}
-
-static void ui_setting_on_language_save(int16_t value)
-{
-  g_app.params.language = (uint8_t)value;
-  APP_LOGI("language=%u", (unsigned)g_app.params.language);
-  app_params_commit();
-}
-
-enum
-{
-  UI_BTN_ID_MENU = 1,
-  UI_BTN_ID_DOWN = 2,
-  UI_BTN_ID_UP = 3,
-  UI_BTN_ID_ENTER = 4
-};
-
-typedef struct
-{
-  Button key_menu;
-  Button key_down;
-  Button key_up;
-  Button key_enter;
-  bool initialized;
-} ui_button_ctx_t;
-
-static ui_button_ctx_t g_ui_btn;
-
-static uint8_t ui_button_level_read(uint8_t button_id)
-{
-  switch(button_id)
-  {
-    case UI_BTN_ID_MENU:
-      return g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_MENU) ? 1U : 0U;
-    case UI_BTN_ID_DOWN:
-      return g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_DOWN) ? 1U : 0U;
-    case UI_BTN_ID_UP:
-      return g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_UP) ? 1U : 0U;
-    case UI_BTN_ID_ENTER:
-      return g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_ENTER) ? 1U : 0U;
-    default:
-      return 0U;
-  }
-}
-
-static void ui_register_pages_once(void)
-{
-  if(g_ui_pages_registered)
-  {
-    return;
-  }
-
-  sl_ui_registry_reset();
-  g_ui_pages_registered = sl_ui_register_pages(g_ui_pages, (uint8_t)(sizeof(g_ui_pages) / sizeof(g_ui_pages[0])));
-}
-
-static void ui_btn_click_cb(Button *btn, void *user_data)
-{
-  (void)user_data;
-  if(btn == 0)
-  {
-    return;
-  }
-
-  APP_LOGI("key btn_id=%u", (unsigned)btn->button_id);
-
-  switch(btn->button_id)
-  {
-    case UI_BTN_ID_MENU:
-      sl_ui_post_key(SL_UI_KEY_BACK, true);
-      break;
-    case UI_BTN_ID_DOWN:
-      sl_ui_post_key(SL_UI_KEY_DOWN, true);
-      break;
-    case UI_BTN_ID_UP:
-      sl_ui_post_key(SL_UI_KEY_UP, true);
-      break;
-    case UI_BTN_ID_ENTER:
-      sl_ui_post_key(SL_UI_KEY_ENTER, true);
-      break;
-    default:
-      break;
-  }
-}
-
-static void ui_btn_repeat_cb(Button *btn, void *user_data)
-{
-  (void)user_data;
-  if(btn == 0)
-  {
-    return;
-  }
-
-  if(btn->button_id == UI_BTN_ID_DOWN)
-  {
-    sl_ui_post_key(SL_UI_KEY_DOWN, true);
-  }
-  else if(btn->button_id == UI_BTN_ID_UP)
-  {
-    sl_ui_post_key(SL_UI_KEY_UP, true);
-  }
-}
-
-static void ui_setup_once(void)
-{
-  static const ui_setting_handlers_t s_ui_setting_handlers = {
-    ui_setting_on_dmx_addr_save,
-    ui_setting_on_dmx_mode_save,
-    ui_setting_on_ign_delay_save,
-    ui_setting_on_lock_delay_save,
-    ui_setting_on_tilt_enable_save,
-    ui_setting_on_language_save
-  };
-
-  if(g_ui_btn.initialized)
-  {
-    return;
-  }
-
-  s_shadow_dmx_addr = (int16_t)g_app.params.dmx_address;
-  s_shadow_dmx_mode = (int16_t)(g_app.params.dmx_mode == DMX_MODE_6CH ? 1 : 0);
-  s_shadow_ign_delay = (int16_t)g_app.params.igniter_delay_ms;
-  s_shadow_lock_delay = (int16_t)g_app.params.oil_lock_delay_ms;
-  s_shadow_tilt_enable = g_app.params.tilt_protect_enable ? 1 : 0;
-
-  ui_setting_page_set_dmx_refs(&s_shadow_dmx_addr, &s_shadow_dmx_mode);
-  ui_setting_page_set_pressure_refs(&s_shadow_ign_delay, &s_shadow_lock_delay);
-  ui_safety_page_set_tilt_ref(&s_shadow_tilt_enable);
-  ui_service_bind_setting_handlers(&s_ui_setting_handlers);
-
-  sl_port_init();
-  sl_port_input_init();
-
-  {
-    uint8_t m = ui_button_level_read(UI_BTN_ID_MENU);
-    uint8_t d = ui_button_level_read(UI_BTN_ID_DOWN);
-    uint8_t u = ui_button_level_read(UI_BTN_ID_UP);
-    uint8_t e = ui_button_level_read(UI_BTN_ID_ENTER);
-    APP_LOGI("btn init state M=%u D=%u U=%u E=%u", (unsigned)m, (unsigned)d, (unsigned)u, (unsigned)e);
-  }
-
-  button_init(&g_ui_btn.key_menu, ui_button_level_read, 1U, UI_BTN_ID_MENU);
-  button_init(&g_ui_btn.key_down, ui_button_level_read, 1U, UI_BTN_ID_DOWN);
-  button_init(&g_ui_btn.key_up, ui_button_level_read, 1U, UI_BTN_ID_UP);
-  button_init(&g_ui_btn.key_enter, ui_button_level_read, 1U, UI_BTN_ID_ENTER);
-
-  button_attach(&g_ui_btn.key_menu, BTN_PRESS_DOWN, ui_btn_click_cb, 0);
-  button_attach(&g_ui_btn.key_down, BTN_PRESS_DOWN, ui_btn_click_cb, 0);
-  button_attach(&g_ui_btn.key_down, BTN_LONG_PRESS_HOLD, ui_btn_repeat_cb, 0);
-  button_attach(&g_ui_btn.key_up, BTN_PRESS_DOWN, ui_btn_click_cb, 0);
-  button_attach(&g_ui_btn.key_up, BTN_LONG_PRESS_HOLD, ui_btn_repeat_cb, 0);
-  button_attach(&g_ui_btn.key_enter, BTN_PRESS_DOWN, ui_btn_click_cb, 0);
-
-  (void)button_start(&g_ui_btn.key_menu);
-  (void)button_start(&g_ui_btn.key_down);
-  (void)button_start(&g_ui_btn.key_up);
-  (void)button_start(&g_ui_btn.key_enter);
-
-  sl_lang_set((int)g_app.params.language);
-  sl_disp_init();
-  sl_disp_fill_rect(0, 0, SL_DISP_WIDTH, 32, 1);
-  sl_disp_flush();
-  ui_register_pages_once();
-  sl_ui_init("splash");
-
-  g_ui_btn.initialized = true;
-  APP_LOGI("ui setup done");
-}
-
-static void selftest_set_mode_state(bool user_mode, TickType_t now)
-{
-  if(user_mode)
-  {
-    fault_manager_try_clear(&g_app.faults, FAULT_E4_LOCKED_MODE, true);
-    (void)app_core_switch_state(&g_app, MACHINE_READY, 0x2002U, (uint32_t)now);
-  }
-  else
-  {
-    fault_manager_set(&g_app.faults, FAULT_E4_LOCKED_MODE);
-    (void)app_core_switch_state(&g_app, MACHINE_LOCKED, 0x2005U, (uint32_t)now);
-  }
-  set_fault_bits(g_app.faults.latched_mask);
-  set_state_bits(g_app.machine.current);
-}
-
-static void run_startup_selftest(void)
-{
-  TickType_t start_tick;
-  TickType_t now;
-  bool user_mode;
-  bool tilt_fault;
-  uint16_t pressure_raw;
-  uint8_t pressure_pct;
-  actuator_cmd_t cmd;
-
-  start_tick = xTaskGetTickCount();
-  cmd.type = ACT_CMD_SAFE_OFF;
-  cmd.priority = 5U;
-  cmd.user_mode = false;
-  cmd.igniter_delay_ms = 0U;
-  cmd.oil_lock_delay_ms = 0U;
-  cmd.fire_duration_ms = 0U;
-  queue_send_latest(q_actuator, &cmd, pdTRUE);
-
-  for(;;)
-  {
-    now = xTaskGetTickCount();
-    user_mode = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_SAFETY_LOCK);
-    tilt_fault = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_TILT_SWITCH);
-    pressure_raw = g_app.hal.adc.read_raw(g_app.hal.adc.ctx, SENSOR_PRESSURE);
-    pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
-
-    if(cfg_pressure_sensor_fault(pressure_raw))
-    {
-      fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
-      APP_LOGW("pressure sensor fault in selftest: raw=%u", (unsigned)pressure_raw);
-      send_safe_off_high_prio();
-      (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2009U, (uint32_t)now);
-      set_fault_bits(g_app.faults.latched_mask);
-      set_state_bits(g_app.machine.current);
-      return;
-    }
-
-    if(g_app.params.tilt_protect_enable && tilt_fault)
-    {
-      fault_manager_set(&g_app.faults, FAULT_E2_TILT);
-      send_safe_off_high_prio();
-      (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2006U, (uint32_t)now);
-      set_fault_bits(g_app.faults.latched_mask);
-      set_state_bits(g_app.machine.current);
-      return;
-    }
-
-    if(pressure_pct >= CFG_PRESSURE_TARGET_PCT)
-    {
-      cmd.type = ACT_CMD_SAFE_OFF;
-      cmd.user_mode = user_mode;
-      queue_send_latest(q_actuator, &cmd, pdTRUE);
-      selftest_set_mode_state(user_mode, now);
-      return;
-    }
-
-    if((now - start_tick) >= pdMS_TO_TICKS(CFG_SELFTEST_PRESSURE_TIMEOUT_MS))
-    {
-      fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
-      send_safe_off_high_prio();
-      (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2007U, (uint32_t)now);
-      set_fault_bits(g_app.faults.latched_mask);
-      set_state_bits(g_app.machine.current);
-      return;
-    }
-
-    cmd.type = ACT_CMD_PUMP_ONLY;
-    cmd.user_mode = user_mode;
-    queue_send_latest(q_actuator, &cmd, pdFALSE);
-    vTaskDelay(pdMS_TO_TICKS(20));
-  }
-}
-
-void safety_task(void *pvParameters)
-{
-  uint16_t pressure_raw;
-  uint8_t pressure_pct;
-  uint16_t voltage_raw;
-  bool user_mode;
-  bool tilt_fault;
-  TickType_t now;
-  TickType_t e1_start;
-  TickType_t e3_start;
-  TickType_t e5_start;
-  uint32_t last_fault_mask;
-  actuator_status_t st;
-  BaseType_t have_status;
-  EventBits_t bits;
-  (void)pvParameters;
-
-  e1_start = 0U;
-  e3_start = 0U;
-  e5_start = 0U;
-  last_fault_mask = 0U;
-
-  for(;;)
-  {
-    now = xTaskGetTickCount();
-    pressure_raw = g_app.hal.adc.read_raw(g_app.hal.adc.ctx, SENSOR_PRESSURE);
-    pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
-    voltage_raw = g_app.hal.adc.read_raw(g_app.hal.adc.ctx, SENSOR_POWER1);
-    user_mode = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_SAFETY_LOCK);
-    tilt_fault = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_TILT_SWITCH);
-
-    have_status = xQueuePeek(q_actuator_status, &st, 0);
-    bits = xEventGroupGetBits(eg_system);
-
-    if(cfg_pressure_sensor_fault(pressure_raw))
-    {
-      e1_start = 0U;
-      fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
-      APP_LOGW("pressure sensor fault: raw=%u", (unsigned)pressure_raw);
-    }
-    else if((have_status == pdTRUE) &&
-       st.out.oil_pump_on &&
-       (st.fire_active == false) &&
-       (st.relief_active == false) &&
-       (pressure_pct < CFG_PRESSURE_TARGET_PCT))
-    {
-      if(e1_start == 0U)
-      {
-        e1_start = now;
-      }
-      else if((now - e1_start) >= pdMS_TO_TICKS(CFG_PRESSURE_ERROR_TIMEOUT_MS))
-      {
-        fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
-      }
-    }
-    else
-    {
-      e1_start = 0U;
-      fault_manager_try_clear(&g_app.faults, FAULT_E1_PRESSURE_BUILD,
-                              (cfg_pressure_sensor_fault(pressure_raw) == false) &&
-                              (pressure_pct >= CFG_PRESSURE_TARGET_PCT));
-    }
-
-    if(g_app.params.tilt_protect_enable && tilt_fault)
-    {
-      fault_manager_set(&g_app.faults, FAULT_E2_TILT);
-    }
-    else
-    {
-      fault_manager_try_clear(&g_app.faults, FAULT_E2_TILT, true);
-    }
-
-    if(cfg_voltage_raw_in_range(voltage_raw) == false)
-    {
-      if(e3_start == 0U)
-      {
-        e3_start = now;
-      }
-      else if((now - e3_start) >= pdMS_TO_TICKS(CFG_VOLTAGE_ERROR_HOLD_MS))
-      {
-        fault_manager_set(&g_app.faults, FAULT_E3_VOLTAGE);
-      }
-    }
-    else
-    {
-      e3_start = 0U;
-      fault_manager_try_clear(&g_app.faults, FAULT_E3_VOLTAGE, true);
-    }
-
-    if((user_mode == false) && (g_app.machine.current != MACHINE_SELFTEST))
-    {
-      fault_manager_set(&g_app.faults, FAULT_E4_LOCKED_MODE);
-    }
-    else
-    {
-      fault_manager_try_clear(&g_app.faults, FAULT_E4_LOCKED_MODE, true);
-    }
-
-    if((have_status == pdTRUE) && st.out.relief_valve_on && (pressure_pct > CFG_PRESSURE_RELIEF_DONE_PCT))
-    {
-      if(e5_start == 0U)
-      {
-        e5_start = now;
-      }
-      else if((now - e5_start) >= pdMS_TO_TICKS(CFG_RELIEF_ERROR_TIMEOUT_MS))
-      {
-        fault_manager_set(&g_app.faults, FAULT_E5_RELIEF);
-      }
-    }
-    else
-    {
-      e5_start = 0U;
-      fault_manager_try_clear(&g_app.faults, FAULT_E5_RELIEF, pressure_pct <= CFG_PRESSURE_RELIEF_DONE_PCT);
-    }
-
-    set_fault_bits(g_app.faults.latched_mask);
-    if(last_fault_mask != g_app.faults.latched_mask)
-    {
-      APP_LOGW("fault mask: 0x%02lX -> 0x%02lX",
-               (unsigned long)last_fault_mask,
-               (unsigned long)g_app.faults.latched_mask);
-      last_fault_mask = g_app.faults.latched_mask;
-    }
-
-    if((g_app.faults.latched_mask & FAULT_MASK_FATAL) != 0U)
-    {
-      send_safe_off_high_prio();
-      (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2101U, (uint32_t)now);
-      set_state_bits(g_app.machine.current);
-    }
-    else if((g_app.faults.latched_mask & FAULT_MASK_E4) != 0U)
-    {
-      (void)app_core_switch_state(&g_app, MACHINE_LOCKED, 0x2102U, (uint32_t)now);
-      set_state_bits(g_app.machine.current);
-    }
-
-    if((user_mode == true) && ((bits & EVT_DMX_ONLINE_BIT) == 0U))
-    {
-      send_safe_off_high_prio();
-    }
-
-    (void)xEventGroupSetBits(eg_system, EVT_HB_SAFETY_BIT);
-    vTaskDelay(pdMS_TO_TICKS(20));
-  }
-}
-
-void control_task(void *pvParameters)
-{
-  TickType_t now;
-  EventBits_t bits;
-  actuator_cmd_t cmd;
-  dmx_intent_t intent;
-  safety_eval_input_t in;
-  bool ok;
-  bool user_mode;
-  bool key_menu;
-  bool key_down;
-  bool key_up;
-  bool key_enter;
-  uint16_t pressure_raw;
-  uint8_t pressure_pct;
-  test_action_t test_action;
-  test_action_t last_test_action;
-  edmx_frame_t frame;
-  bool pressure_ready_for_fire;
-  bool pressure_refill_active;
-  (void)pvParameters;
-
-  last_test_action = (test_action_t)0xFF;
-  pressure_refill_active = true;
-
-  /* Startup state SELFTEST is set in wk_freertos_init before tasks run. */
-  vTaskDelay(pdMS_TO_TICKS(50));
-  run_startup_selftest();
-
-  for(;;)
-  {
-    now = xTaskGetTickCount();
-    edmx_rx_process(&s_dmx_rx, (uint32_t)now);
-
-    if(edmx_rx_is_online(&s_dmx_rx, (uint32_t)now))
-    {
-      (void)xEventGroupSetBits(eg_system, EVT_DMX_ONLINE_BIT);
-    }
-    else
-    {
-      (void)xEventGroupClearBits(eg_system, EVT_DMX_ONLINE_BIT);
-    }
-
-    bits = xEventGroupGetBits(eg_system);
-    user_mode = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_SAFETY_LOCK);
-
-    ok = edmx_rx_copy_latest(&s_dmx_rx, &frame);
-    if(ok)
-    {
-      ok = dmx_strategy_build_intent(g_app.params.dmx_mode, frame.channels, g_app.params.dmx_address, &intent);
-    }
-    if(ok == false)
-    {
-      intent.request_fire = false;
-      intent.request_relief = false;
-      intent.fire_duration_ms = 0U;
-      if((bits & EVT_DMX_ONLINE_BIT) != 0U)
-      {
-        APP_LOGW("dmx invalid -> safe_off");
-      }
-    }
-
-    in.latched_fault_mask = read_fault_mask_from_events(bits);
-    in.dmx_online = ((bits & EVT_DMX_ONLINE_BIT) != 0U) ? 1 : 0;
-    in.relief_requested = intent.request_relief ? 1 : 0;
-    in.fire_requested = intent.request_fire ? 1 : 0;
-    in.in_user_mode = user_mode ? 1 : 0;
-    in.tilt_fault_active = (g_app.params.tilt_protect_enable && g_app.hal.input.read(g_app.hal.input.ctx, INPUT_TILT_SWITCH)) ? 1 : 0;
-    in.voltage_ok = 1;
-    pressure_raw = g_app.hal.adc.read_raw(g_app.hal.adc.ctx, SENSOR_PRESSURE);
-    pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
-    in.pressure_pct = pressure_pct;
-    in.pressure_fire_min_pct = CFG_PRESSURE_FIRE_MIN_PCT;
-
-    if(cfg_pressure_sensor_fault(pressure_raw))
-    {
-      fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
-      set_fault_bits(g_app.faults.latched_mask);
-      APP_LOGW("pressure sensor fault in control: raw=%u", (unsigned)pressure_raw);
-      send_safe_off_high_prio();
-      (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2205U, (uint32_t)now);
-      set_state_bits(g_app.machine.current);
-      (void)xEventGroupSetBits(eg_system, EVT_HB_CONTROL_BIT);
-      vTaskDelay(pdMS_TO_TICKS(10));
-      continue;
-    }
-
-    cmd.priority = 1U;
-    cmd.igniter_delay_ms = g_app.params.igniter_delay_ms;
-    cmd.oil_lock_delay_ms = g_app.params.oil_lock_delay_ms;
-    cmd.fire_duration_ms = intent.fire_duration_ms;
-    cmd.user_mode = user_mode;
-
-    if(user_mode == false)
-    {
-      if(g_ui_menu_active == true)
-      {
-        cmd.type = ACT_CMD_SAFE_OFF;
-        queue_send_latest(q_actuator, &cmd, pdTRUE);
-        (void)xEventGroupSetBits(eg_system, EVT_HB_CONTROL_BIT);
-        vTaskDelay(pdMS_TO_TICKS(10));
-        continue;
-      }
-
-      key_menu = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_MENU);
-      key_down = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_DOWN);
-      key_up = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_UP);
-      key_enter = g_app.hal.input.read(g_app.hal.input.ctx, INPUT_KEY_ENTER);
-
-      if((in.latched_fault_mask & FAULT_MASK_FATAL) != 0U)
-      {
-        (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2301U, (uint32_t)now);
-        set_state_bits(g_app.machine.current);
-        cmd.type = ACT_CMD_SAFE_OFF;
-        queue_send_latest(q_actuator, &cmd, pdTRUE);
-      }
-      else
-      {
-        if(key_menu)
-        {
-          test_action = TEST_ACT_SAFE_OFF;
-        }
-        else if(key_down)
-        {
-          test_action = TEST_ACT_RELIEF;
-        }
-        else if(key_enter)
-        {
-          test_action = TEST_ACT_FIRE;
-        }
-        else if(key_up)
-        {
-          test_action = TEST_ACT_PUMP_ONLY;
-        }
-        else if(((bits & EVT_DMX_ONLINE_BIT) != 0U) && (ok == true))
-        {
-          if(intent.request_relief)
-          {
-            test_action = TEST_ACT_RELIEF;
-          }
-          else if(intent.request_fire)
-          {
-            test_action = TEST_ACT_FIRE;
-          }
-          else
-          {
-            test_action = TEST_ACT_SAFE_OFF;
-          }
-        }
-        else
-        {
-          test_action = TEST_ACT_SAFE_OFF;
-        }
-
-        if(test_action != last_test_action)
-        {
-          switch(test_action)
-          {
-            case TEST_ACT_PUMP_ONLY:
-              cmd.type = ACT_CMD_PUMP_ONLY;
-              APP_LOGI("test mode action=PUMP");
-              break;
-            case TEST_ACT_RELIEF:
-              cmd.type = ACT_CMD_RELIEF;
-              APP_LOGI("test mode action=RELIEF");
-              break;
-            case TEST_ACT_FIRE:
-              cmd.type = ACT_CMD_FIRE;
-              APP_LOGI("test mode action=IGNITER_TEST");
-              break;
-            case TEST_ACT_SAFE_OFF:
-            default:
-              cmd.type = ACT_CMD_SAFE_OFF;
-              APP_LOGI("test mode action=SAFE_OFF");
-              break;
-          }
-
-          queue_send_latest(q_actuator, &cmd, (cmd.type == ACT_CMD_SAFE_OFF) ? pdTRUE : pdFALSE);
-          last_test_action = test_action;
-        }
-      }
-
-      (void)xEventGroupSetBits(eg_system, EVT_HB_CONTROL_BIT);
-      vTaskDelay(pdMS_TO_TICKS(10));
-      continue;
-    }
-
-    last_test_action = (test_action_t)0xFF;
-
-    switch(safety_guard_eval(&in))
-    {
-      case SAFETY_FORCE_STOP:
-        (void)app_core_switch_state(&g_app, MACHINE_FAULT, 0x2201U, (uint32_t)now);
-        set_state_bits(g_app.machine.current);
-        cmd.type = ACT_CMD_SAFE_OFF;
-        queue_send_latest(q_actuator, &cmd, pdTRUE);
-        break;
-      case SAFETY_LOCKED:
-        (void)app_core_switch_state(&g_app, MACHINE_LOCKED, 0x2202U, (uint32_t)now);
-        set_state_bits(g_app.machine.current);
-        cmd.type = ACT_CMD_SAFE_OFF;
-        queue_send_latest(q_actuator, &cmd, pdTRUE);
-        break;
-      case SAFETY_FORCE_RELIEF:
-        (void)app_core_switch_state(&g_app, MACHINE_RELIEF, 0x2203U, (uint32_t)now);
-        set_state_bits(g_app.machine.current);
-        cmd.type = ACT_CMD_RELIEF;
-        queue_send_latest(q_actuator, &cmd, pdFALSE);
-        break;
-      case SAFETY_ALLOW_FIRE:
-      default:
-        pressure_ready_for_fire = (pressure_pct >= CFG_PRESSURE_FIRE_MIN_PCT);
-        if(pressure_pct >= CFG_PRESSURE_TARGET_PCT)
-        {
-          pressure_refill_active = false;
-        }
-        else if(pressure_pct <= CFG_PRESSURE_REFILL_RESUME_PCT)
-        {
-          pressure_refill_active = true;
-        }
-
-        if(intent.request_relief)
-        {
-          (void)app_core_switch_state(&g_app, MACHINE_RELIEF, 0x2204U, (uint32_t)now);
-          set_state_bits(g_app.machine.current);
-          cmd.type = ACT_CMD_RELIEF;
-          queue_send_latest(q_actuator, &cmd, pdFALSE);
-        }
-        else if(intent.request_fire && pressure_ready_for_fire)
-        {
-          cmd.type = ACT_CMD_FIRE;
-          queue_send_latest(q_actuator, &cmd, pdFALSE);
-          (void)app_core_switch_state(&g_app, MACHINE_FIRING, 0x2003U, (uint32_t)now);
-          set_state_bits(g_app.machine.current);
-        }
-        else if(intent.request_fire)
-        {
-          cmd.type = ACT_CMD_PUMP_ONLY;
-          queue_send_latest(q_actuator, &cmd, pdFALSE);
-          (void)app_core_switch_state(&g_app, MACHINE_READY, 0x2008U, (uint32_t)now);
-          set_state_bits(g_app.machine.current);
-        }
-        else
-        {
-          cmd.type = pressure_refill_active ? ACT_CMD_PUMP_ONLY : ACT_CMD_SAFE_OFF;
-          queue_send_latest(q_actuator, &cmd, pdFALSE);
-          (void)app_core_switch_state(&g_app, MACHINE_READY, 0x2004U, (uint32_t)now);
-          set_state_bits(g_app.machine.current);
-        }
-        break;
-    }
-
-    (void)xEventGroupSetBits(eg_system, EVT_HB_CONTROL_BIT);
-    vTaskDelay(pdMS_TO_TICKS(10));
-  }
-}
 
 void actuator_task(void *pvParameters)
 {
@@ -1355,90 +453,6 @@ void actuator_task(void *pvParameters)
   }
 }
 
-void dmx_task(void *pvParameters)
-{
-  edmx_event_t evt;
-  bool is_break;
-  uint8_t b;
-  (void)pvParameters;
-
-  for(;;)
-  {
-    while(g_app.hal.dmx.poll_byte(g_app.hal.dmx.ctx, &b, &is_break))
-    {
-      evt.byte = b;
-      evt.flags = is_break ? EDMX_EVENT_FLAG_BREAK : 0U;
-      (void)edmx_rx_push_event(&s_dmx_rx, &evt);
-    }
-    (void)xEventGroupSetBits(eg_system, EVT_HB_DMX_BIT);
-    vTaskDelay(pdMS_TO_TICKS(1));
-  }
-}
-
-void ui_task(void *pvParameters)
-{
-  (void)pvParameters;
-  ui_setup_once();
-  for(;;)
-  {
-    uint8_t tick_i;
-    const char *page_name;
-
-    button_ticks();
-
-    {
-      EventBits_t bits;
-      uint16_t pressure_raw;
-      uint8_t pressure_pct;
-      bool dmx_online;
-      machine_state_t st;
-      ui_machine_snapshot_t snap;
-      bool snapshot_changed;
-
-      bits = xEventGroupGetBits(eg_system);
-      pressure_raw = g_app.hal.adc.read_raw(g_app.hal.adc.ctx, SENSOR_PRESSURE);
-      pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
-      dmx_online = ((bits & EVT_DMX_ONLINE_BIT) != 0U);
-      st = g_app.machine.current;
-      snapshot_changed = false;
-
-      {
-        actuator_status_t act_st;
-        BaseType_t act_ok;
-        bool pumping;
-
-        act_ok = xQueuePeek(q_actuator_status, &act_st, 0);
-        pumping = ((act_ok == pdTRUE) && act_st.out.oil_pump_on && (act_st.fire_active == false) && (act_st.relief_active == false));
-        snap.state = st;
-        snap.pressure_pct = pressure_pct;
-        snap.dmx_addr = g_app.params.dmx_address;
-        snap.fault_mask = g_app.faults.latched_mask;
-        snap.dmx_online = dmx_online;
-        snap.pumping = pumping;
-        snapshot_changed = ui_service_set_machine_snapshot(&snap);
-      }
-      if(snapshot_changed)
-      {
-        sl_ui_request_redraw();
-      }
-    }
-
-      for(tick_i = 0U; tick_i < (uint8_t)TICKS_INTERVAL; tick_i++)
-      {
-        sl_ui_tick_up();
-      }
-      sl_ui_run_once();
-
-    page_name = sl_ui_current_page();
-    g_ui_menu_active = ((page_name != 0) &&
-                        (strcmp(page_name, "idle") != 0) &&
-                        (strcmp(page_name, "checking") != 0) &&
-                        (strcmp(page_name, "splash") != 0));
-
-    (void)xEventGroupSetBits(eg_system, EVT_HB_UI_BIT);
-    vTaskDelay(pdMS_TO_TICKS(TICKS_INTERVAL));
-  }
-}
 
 void diag_task(void *pvParameters)
 {
@@ -1467,7 +481,7 @@ void diag_task(void *pvParameters)
         cmd.igniter_delay_ms = 0U;
         cmd.oil_lock_delay_ms = 0U;
         cmd.fire_duration_ms = 0U;
-        queue_send_latest(q_actuator, &cmd, pdTRUE);
+        app_task_queue_send_latest(q_actuator, &cmd, pdTRUE);
       }
     }
     else
@@ -1503,9 +517,45 @@ void wk_freertos_init(void)
   q_actuator_status = xQueueCreateStatic(1, sizeof(actuator_status_t), actuator_status_storage, &actuator_status_queue_tcb);
   eg_system = xEventGroupCreateStatic(&evt_group_tcb);
   (void)edmx_rx_init(&s_dmx_rx, s_dmx_fifo_storage, sizeof(s_dmx_fifo_storage), CFG_DMX_LOST_TIMEOUT_MS);
+  {
+    app_task_dmx_cfg_t dmx_cfg;
+    app_task_safety_cfg_t safety_cfg;
+    app_task_control_cfg_t control_cfg;
+    app_task_ui_cfg_t ui_cfg;
+
+    dmx_cfg.app = &g_app;
+    dmx_cfg.rx = &s_dmx_rx;
+    dmx_cfg.event_group = eg_system;
+    dmx_cfg.hb_bit = EVT_HB_DMX_BIT;
+    app_task_dmx_init(&dmx_cfg);
+
+    safety_cfg.app = &g_app;
+    safety_cfg.q_actuator = q_actuator;
+    safety_cfg.q_actuator_status = q_actuator_status;
+    safety_cfg.event_group = eg_system;
+    safety_cfg.hb_bit = EVT_HB_SAFETY_BIT;
+    app_task_safety_init(&safety_cfg);
+
+    control_cfg.app = &g_app;
+    control_cfg.dmx_rx = &s_dmx_rx;
+    control_cfg.q_actuator = q_actuator;
+    control_cfg.event_group = eg_system;
+    control_cfg.hb_bit = EVT_HB_CONTROL_BIT;
+    control_cfg.ui_menu_active = &g_ui_menu_active;
+    app_task_control_init(&control_cfg);
+
+    ui_cfg.app = &g_app;
+    ui_cfg.q_actuator_status = q_actuator_status;
+    ui_cfg.event_group = eg_system;
+    ui_cfg.dmx_online_bit = EVT_DMX_ONLINE_BIT;
+    ui_cfg.hb_bit = EVT_HB_UI_BIT;
+    ui_cfg.menu_active = &g_ui_menu_active;
+    ui_cfg.commit_params = app_params_commit;
+    app_task_ui_init(&ui_cfg);
+  }
 
   (void)app_core_switch_state(&g_app, MACHINE_SELFTEST, 0x2001U, (uint32_t)xTaskGetTickCount());
-  set_state_bits(g_app.machine.current);
+  app_task_set_state_bits(eg_system, g_app.machine.current);
 
   app_wdt_init();
 
@@ -1517,7 +567,7 @@ void wk_freertos_init(void)
 }
 
 /*
- * Keil 工程文件尚未自动纳入新目录源码时，启用以下聚合编译入口�? * 后续�?app/domain/hal_if/bsp/cfg 加入工程后，可移除此段并独立编译�? */
+ * Keil 工程文件尚未自动纳入新目录源码时，启用以下聚合编译入口�? * 后续�?app/domain/hal_if/bsp/cfg 加入工程后，可移除此段并独立编译�? */
 #ifndef FLAMETHROWER_SEPARATE_COMPILATION
 #include "../../cfg/system_config.c"
 #include "../../domain/event_log.c"
@@ -1526,7 +576,12 @@ void wk_freertos_init(void)
 #include "../../domain/safety_guard.c"
 #include "../../domain/dmx_strategy.c"
 #include "../../app/app_core.c"
+#include "../../app/app_task_common.c"
 #include "../../app/ui_services.c"
+#include "../../app/task_safety/task_safety.c"
+#include "../../app/task_control/task_control.c"
+#include "../../app/task_ui/task_ui.c"
+#include "../../app/task_dmx/task_dmx.c"
 #include "../../bsp/at32f415/bsp_uart.c"
 #include "../../bsp/at32f415/bsp_at32f415.c"
 #define ST7920_COMMAND_CMD_DELAY        10
@@ -1564,6 +619,8 @@ void wk_freertos_init(void)
 #include "../../app/ui_pages/ui_splash_page.c"
 #include "../../app/ui_pages/ui_checking_page.c"
 #endif
+
+
 
 
 
