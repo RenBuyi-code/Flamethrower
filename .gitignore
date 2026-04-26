@@ -1,0 +1,16 @@
+.vscode/
+
+project/MDK_V5/listings/
+project/MDK_V5/objects/
+project/MDK_V5/*.uvguix.*
+project/MDK_V5/JLinkLog.txt
+
+keil_build_stdout.txt
+
+*.axf
+*.bin
+*.hex
+*.o
+*.d
+*.lst
+*.map
