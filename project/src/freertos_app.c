@@ -810,13 +810,17 @@ void safety_task(void *pvParameters)
     have_status = xQueuePeek(q_actuator_status, &st, 0);
     bits = xEventGroupGetBits(eg_system);
 
-    if((have_status == pdTRUE) && st.out.oil_pump_on && (pressure_pct < CFG_PRESSURE_FIRE_MIN_PCT))
+    if((have_status == pdTRUE) &&
+       st.out.oil_pump_on &&
+       (st.fire_active == false) &&
+       (st.relief_active == false) &&
+       (pressure_pct < CFG_PRESSURE_TARGET_PCT))
     {
       if(e1_start == 0U)
       {
         e1_start = now;
       }
-      else if((now - e1_start) >= pdMS_TO_TICKS(CFG_SELFTEST_PRESSURE_TIMEOUT_MS))
+      else if((now - e1_start) >= pdMS_TO_TICKS(CFG_PRESSURE_ERROR_TIMEOUT_MS))
       {
         fault_manager_set(&g_app.faults, FAULT_E1_PRESSURE_BUILD);
       }
@@ -1334,7 +1338,15 @@ void ui_task(void *pvParameters)
       dmx_online = ((bits & EVT_DMX_ONLINE_BIT) != 0U);
       st = g_app.machine.current;
 
-      ui_idle_page_update(st, dmx_online, pressure_pct, g_app.faults.latched_mask, g_app.params.dmx_address);
+      {
+        actuator_status_t act_st;
+        BaseType_t act_ok;
+        bool pumping;
+
+        act_ok = xQueuePeek(q_actuator_status, &act_st, 0);
+        pumping = ((act_ok == pdTRUE) && act_st.out.oil_pump_on && (act_st.fire_active == false) && (act_st.relief_active == false));
+        ui_idle_page_update(st, dmx_online, pumping, pressure_pct, g_app.faults.latched_mask, g_app.params.dmx_address);
+      }
       ui_checking_page_update(st, pressure_pct, g_app.faults.latched_mask);
     }
 
@@ -1413,6 +1425,11 @@ void ui_task(void *pvParameters)
       {
         APP_LOGI("ui page: main_menu -> pressure_set");
         sl_page_enter(ui_setting_page_get_pressure());
+      }
+      else if(sel == UI_MENU_ITEM_TILT)
+      {
+        APP_LOGI("ui page: main_menu -> tilt");
+        sl_page_enter(ui_safety_page_get());
       }
       else if(sel == UI_MENU_ITEM_LANGUAGE)
       {

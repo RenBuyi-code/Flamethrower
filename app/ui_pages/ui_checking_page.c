@@ -9,11 +9,13 @@
 #include "task.h"
 
 #define UI_DISP_W          122
+#define UI_PRESSURE_UPDATE_MS 500U
 
 static sl_Page s_check_page;
 static machine_state_t s_state;
 static uint8_t s_pressure_pct;
 static uint32_t s_fault_mask;
+static TickType_t s_pressure_update_tick;
 
 static void uicp_init(sl_Page *self)
 {
@@ -21,6 +23,7 @@ static void uicp_init(sl_Page *self)
   s_state = MACHINE_SELFTEST;
   s_pressure_pct = 0U;
   s_fault_mask = 0U;
+  s_pressure_update_tick = 0U;
 }
 
 static int uicp_center_x(const char *text)
@@ -107,10 +110,30 @@ sl_Page *ui_checking_page_get(void)
 
 void ui_checking_page_update(machine_state_t state, uint8_t pressure_pct, uint32_t fault_mask)
 {
+  TickType_t now_tick;
+  bool changed;
+
+  now_tick = xTaskGetTickCount();
+  changed = (s_state != state) || (s_fault_mask != fault_mask);
+
   s_state = state;
-  s_pressure_pct = pressure_pct;
   s_fault_mask = fault_mask;
-  sl_page_request_redraw();
+
+  if((s_pressure_update_tick == 0U) ||
+     ((now_tick - s_pressure_update_tick) >= pdMS_TO_TICKS(UI_PRESSURE_UPDATE_MS)))
+  {
+    if(s_pressure_pct != pressure_pct)
+    {
+      changed = true;
+      s_pressure_pct = pressure_pct;
+    }
+    s_pressure_update_tick = now_tick;
+  }
+
+  if(changed)
+  {
+    sl_page_request_redraw();
+  }
 }
 
 bool ui_checking_page_is_done(void)

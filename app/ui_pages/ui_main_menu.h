@@ -8,8 +8,9 @@
 #define UI_MENU_ITEM_NONE       (-1)
 #define UI_MENU_ITEM_DMX        0
 #define UI_MENU_ITEM_PRESSURE   1
-#define UI_MENU_ITEM_LANGUAGE   2
-#define UI_MENU_ITEM_COUNT      3
+#define UI_MENU_ITEM_TILT       2
+#define UI_MENU_ITEM_LANGUAGE   3
+#define UI_MENU_ITEM_COUNT      4
 
 sl_Page *ui_main_menu_get(void);
 int ui_main_menu_consume_selected(void);

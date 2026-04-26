@@ -16,6 +16,7 @@
 static const uint8_t s_item_ids[UI_MENU_ITEM_COUNT] = {
     SL_STR_DMX_SET,
     SL_STR_PRESSURE_SET,
+    SL_STR_TILT,
     SL_STR_LANGUAGE
 };
 
