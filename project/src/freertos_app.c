@@ -1,10 +1,28 @@
-/* add user code begin Header */
 /**
-  ******************************************************************************
-  * File Name          : freertos_app.c
-  * Description        : RTOS application with safety-first architecture
-  */
-/* add user code end Header */
+ * @file    freertos_app.c
+ * @brief   RTOS应用主文件
+ *
+ * RTOS应用核心模块，负责：
+ *   - 系统初始化（硬件、软件）
+ *   - FreeRTOS任务创建
+ *   - 任务间通信机制（队列、事件组）
+ *   - 执行器任务实现
+ *   - 诊断任务（心跳监控）
+ *   - 领域自检测试
+ *
+ * 系统架构：
+ *   - 6个主要任务：safety、control、actuator、dmx、ui、diag
+ *   - 2个队列：actuator_cmd（命令）、actuator_status（状态）
+ *   - 1个事件组：系统事件和心跳标志
+ *
+ * 设计思路：
+ *   - 安全优先架构
+ *   - 静态任务和队列创建，减少运行时开销
+ *   - 心跳机制监控任务健康状态
+ *   - 与其他模块的关系：
+ *     - app/task_*：使用任务模块
+ *     - domain：进行领域自检
+ */
 
 #include "freertos_app.h"
 #include "../inc/at32f415_conf.h"
@@ -24,24 +42,40 @@
 #include "../../middleware/easyDMX/easy_dmx.h"
 #include <string.h>
 
-/* watchdog switch: keep disabled during debug bring-up */
+/** @brief 看门狗使能开关（调试阶段关闭） */
 #define APP_WDT_ENABLE                    0U
+/** @brief 看门狗时钟分频 */
 #define APP_WDT_DIVIDER                   WDT_CLK_DIV_256
+/** @brief 看门狗重载值 */
 #define APP_WDT_RELOAD                    1000U
+/** @brief 领域自检使能开关 */
 #define APP_DOMAIN_SELFTEST_ENABLE        1U
 
-/* task handler */
-TaskHandle_t safety_handle;
-TaskHandle_t control_handle;
-TaskHandle_t actuator_handle;
-TaskHandle_t dmx_handle;
-TaskHandle_t ui_handle;
-TaskHandle_t diag_handle;
+/**
+ * @brief   任务句柄定义
+ *
+ * 用于引用和控制各任务
+ */
+TaskHandle_t safety_handle;     /**< 安全任务句柄 */
+TaskHandle_t control_handle;     /**< 控制任务句柄 */
+TaskHandle_t actuator_handle;    /**< 执行器任务句柄 */
+TaskHandle_t dmx_handle;        /**< DMX任务句柄 */
+TaskHandle_t ui_handle;         /**< UI任务句柄 */
+TaskHandle_t diag_handle;       /**< 诊断任务句柄 */
 
-/* Idle task control block and stack */
+/**
+ * @brief   空闲任务内存
+ *
+ * 静态分配的空闲任务控制块和栈
+ */
 static StackType_t idle_task_stack[configMINIMAL_STACK_SIZE];
 static StaticTask_t idle_task_tcb;
 
+/**
+ * @brief   任务控制块和栈（静态分配）
+ *
+ * 为每个任务预分配控制块和栈内存
+ */
 static StaticTask_t safety_tcb;
 static StaticTask_t control_tcb;
 static StaticTask_t actuator_tcb;
@@ -49,6 +83,11 @@ static StaticTask_t dmx_tcb;
 static StaticTask_t ui_tcb;
 static StaticTask_t diag_tcb;
 
+/**
+ * @brief   任务栈大小定义
+ *
+ * 每个任务的栈大小（单位：字）
+ */
 static StackType_t safety_stack[320];
 static StackType_t control_stack[384];
 static StackType_t actuator_stack[320];
@@ -56,29 +95,74 @@ static StackType_t dmx_stack[256];
 static StackType_t ui_stack[256];
 static StackType_t diag_stack[256];
 
+/**
+ * @brief   执行器命令队列
+ *
+ * 存储待执行的执行器命令
+ */
 static StaticQueue_t actuator_queue_tcb;
 static uint8_t actuator_queue_storage[8 * sizeof(actuator_cmd_t)];
 
+/**
+ * @brief   执行器状态队列
+ *
+ * 存储当前执行器状态（单消费者）
+ */
 static StaticQueue_t actuator_status_queue_tcb;
 static uint8_t actuator_status_storage[sizeof(actuator_status_t)];
 
+/**
+ * @brief   系统事件组
+ *
+ * 用于任务间同步和事件标志管理
+ */
 static StaticEventGroup_t evt_group_tcb;
 
-static QueueHandle_t q_actuator;
-static QueueHandle_t q_actuator_status;
-static EventGroupHandle_t eg_system;
+/**
+ * @brief   队列和事件组句柄
+ */
+static QueueHandle_t q_actuator;            /**< 执行器命令队列 */
+static QueueHandle_t q_actuator_status;     /**< 执行器状态队列 */
+static EventGroupHandle_t eg_system;         /**< 系统事件组 */
 
+/**
+ * @brief   全局应用核心实例
+ */
 static app_core_t g_app;
+
+/**
+ * @brief   DMX接收器实例
+ */
 static edmx_rx_t s_dmx_rx;
 static uint8_t s_dmx_fifo_storage[1024];
 
+/**
+ * @brief   UI性能监控变量
+ */
 static uint32_t g_ui_perf_last_cycles;
 static uint32_t g_ui_perf_monotonic_us;
 static uint32_t g_ui_perf_cycles_per_us;
 static bool g_ui_perf_dwt_ready;
+
+/**
+ * @brief   UI菜单活跃状态
+ */
 static bool g_ui_menu_active;
 
+/**
+ * @brief   提交参数修改
+ *
+ * 对参数进行校验后保存到Flash
+ */
 static void app_params_commit(void);
+
+/**
+ * @brief   获取空闲任务内存（静态分配）
+ *
+ * @param[out] ppxIdleTaskTCBBuffer     空闲任务TCB缓冲区
+ * @param[out] ppxIdleTaskStackBuffer   空闲任务栈缓冲区
+ * @param[out] pulIdleTaskStackSize     空闲任务栈大小
+ */
 #if (configSUPPORT_STATIC_ALLOCATION == 1)
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
                                    StackType_t **ppxIdleTaskStackBuffer,
@@ -99,6 +183,11 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
 }
 #endif
 
+/**
+ * @brief   初始化UI性能监控
+ *
+ * 配置CPU周期计数器用于性能测量
+ */
 static void ui_perf_init(void)
 {
   uint32_t cpu_hz;
@@ -123,6 +212,11 @@ static void ui_perf_init(void)
   g_ui_perf_dwt_ready = ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) != 0U);
 }
 
+/**
+ * @brief   获取当前微秒数
+ *
+ * @return    微秒数（DWT计数器或系统tick）
+ */
 static uint32_t ui_perf_now_us(void)
 {
   if(g_ui_perf_dwt_ready)
@@ -138,6 +232,11 @@ static uint32_t ui_perf_now_us(void)
   return (uint32_t)xTaskGetTickCount() * 1000U;
 }
 
+/**
+ * @brief   初始化看门狗
+ *
+ * 配置并使能看门狗（调试阶段默认关闭）
+ */
 static void app_wdt_init(void)
 {
 #if (APP_WDT_ENABLE != 0U)
@@ -152,6 +251,11 @@ static void app_wdt_init(void)
 #endif
 }
 
+/**
+ * @brief   喂狗
+ *
+ * 重置看门狗计数器，防止系统复位
+ */
 static void app_wdt_feed(void)
 {
 #if (APP_WDT_ENABLE != 0U)
@@ -159,12 +263,24 @@ static void app_wdt_feed(void)
 #endif
 }
 
+/**
+ * @brief   提交参数修改
+ *
+ * 校验参数后保存到Flash存储
+ */
 static void app_params_commit(void)
 {
   cfg_sanitize_params(&g_app.params);
   (void)g_app.hal.storage.save_params(g_app.hal.storage.ctx, &g_app.params);
 }
 
+/**
+ * @brief   自检：机器状态机
+ *
+ * @return    测试是否通过
+ *
+ * 测试状态转换逻辑，包括合法转换和非法转换
+ */
 static bool app_selftest_machine_state(void)
 {
   machine_state_ctx_t st;
@@ -179,6 +295,13 @@ static bool app_selftest_machine_state(void)
   return ok;
 }
 
+/**
+ * @brief   自检：DMX策略
+ *
+ * @return    测试是否通过
+ *
+ * 测试DMX解析逻辑，包括2CH和6CH模式
+ */
 static bool app_selftest_dmx_strategy(void)
 {
   uint8_t ch[512];
@@ -224,6 +347,13 @@ static bool app_selftest_dmx_strategy(void)
   return ok;
 }
 
+/**
+ * @brief   自检：故障管理器
+ *
+ * @return    测试是否通过
+ *
+ * 测试故障设置、清除和查询逻辑
+ */
 static bool app_selftest_fault_manager(void)
 {
   fault_manager_t fm;
@@ -239,6 +369,13 @@ static bool app_selftest_fault_manager(void)
   return ok;
 }
 
+/**
+ * @brief   自检：安全防护
+ *
+ * @return    测试是否通过
+ *
+ * 测试安全评估逻辑，包括各种安全动作
+ */
 static bool app_selftest_safety_guard(void)
 {
   safety_eval_input_t in;
@@ -265,6 +402,13 @@ static bool app_selftest_safety_guard(void)
   return ok;
 }
 
+/**
+ * @brief   自检：EasyDMX
+ *
+ * @return    测试是否通过
+ *
+ * 测试DMX接收器逻辑，包括Break检测和帧解析
+ */
 static bool app_selftest_easy_dmx(void)
 {
   edmx_rx_t rx;
@@ -302,6 +446,11 @@ static bool app_selftest_easy_dmx(void)
   return ok;
 }
 
+/**
+ * @brief   运行领域自检
+ *
+ * 执行所有领域模块的自检测试
+ */
 static void app_run_domain_selftests(void)
 {
 #if (APP_DOMAIN_SELFTEST_ENABLE != 0U)
@@ -326,7 +475,18 @@ static void app_run_domain_selftests(void)
 #endif
 }
 
-
+/**
+ * @brief   执行器任务
+ *
+ * @param[in] pvParameters  未使用
+ *
+ * 职责：
+ *   - 接收执行器命令
+ *   - 管理执行器状态（油泵、阀门、点火器等）
+ *   - 处理点火时序
+ *   - 控制LED指示灯
+ *   - 更新执行器状态供其他任务查询
+ */
 void actuator_task(void *pvParameters)
 {
   actuator_output_t out;
@@ -453,7 +613,17 @@ void actuator_task(void *pvParameters)
   }
 }
 
-
+/**
+ * @brief   诊断任务
+ *
+ * @param[in] pvParameters  未使用
+ *
+ * 职责：
+ *   - 监控所有任务的心跳标志
+ *   - 检测任务是否停止响应
+ *   - 在任务失败时发送安全关闭命令
+ *   - 定期喂狗
+ */
 void diag_task(void *pvParameters)
 {
   EventBits_t bits;
@@ -496,6 +666,11 @@ void diag_task(void *pvParameters)
   }
 }
 
+/**
+ * @brief   创建所有FreeRTOS任务
+ *
+ * 使用静态分配创建所有任务
+ */
 void freertos_task_create(void)
 {
   safety_handle = xTaskCreateStatic(safety_task, "safety", 320, 0, configMAX_PRIORITIES - 1U, safety_stack, &safety_tcb);
@@ -506,6 +681,22 @@ void freertos_task_create(void)
   diag_handle = xTaskCreateStatic(diag_task, "diag", 256, 0, configMAX_PRIORITIES - 5U, diag_stack, &diag_tcb);
 }
 
+/**
+ * @brief   FreeRTOS初始化入口
+ *
+ * 初始化流程：
+ *   1. 初始化UI性能监控
+ *   2. 初始化应用核心
+ *   3. 加载或默认参数
+ *   4. 运行领域自检
+ *   5. 创建队列和事件组
+ *   6. 初始化DMX接收器
+ *   7. 初始化所有任务配置
+ *   8. 切换到自检状态
+ *   9. 初始化看门狗
+ *   10. 创建所有任务
+ *   11. 启动调度器
+ */
 void wk_freertos_init(void)
 {
   ui_perf_init();
@@ -517,6 +708,7 @@ void wk_freertos_init(void)
   q_actuator_status = xQueueCreateStatic(1, sizeof(actuator_status_t), actuator_status_storage, &actuator_status_queue_tcb);
   eg_system = xEventGroupCreateStatic(&evt_group_tcb);
   (void)edmx_rx_init(&s_dmx_rx, s_dmx_fifo_storage, sizeof(s_dmx_fifo_storage), CFG_DMX_LOST_TIMEOUT_MS);
+
   {
     app_task_dmx_cfg_t dmx_cfg;
     app_task_safety_cfg_t safety_cfg;
@@ -565,26 +757,3 @@ void wk_freertos_init(void)
 
   vTaskStartScheduler();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

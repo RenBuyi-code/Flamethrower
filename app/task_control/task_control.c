@@ -1,3 +1,25 @@
+/**
+ * @file    task_control.c
+ * @brief   控制任务实现
+ *
+ * 控制任务模块，负责：
+ *   - 处理DMX命令解析和执行
+ *   - 管理系统状态转换（就绪、点火、泄压等）
+ *   - 执行启动自检
+ *   - 处理用户模式和测试模式
+ *   - 协调安全任务和执行器任务
+ *
+ * 设计思路：
+ *   - 定期处理DMX数据
+ *   - 根据安全评估结果执行相应操作
+ *   - 管理压力状态和自动补压
+ *   - 与其他模块的关系：
+ *     - app_core：使用核心功能进行状态转换
+ *     - dmx_strategy：解析DMX命令生成执行意向
+ *     - safety_guard：评估安全状态
+ *     - task_safety：接收安全故障信息
+ */
+
 #include "task_control.h"
 #include "../app_task_common.h"
 #include "../log_rtt.h"
@@ -7,8 +29,20 @@
 #include "../../domain/safety_guard.h"
 #include <string.h>
 
+/** @brief 控制任务全局配置（静态单例） */
 static app_task_control_cfg_t s_task_control_cfg;
 
+/**
+ * @brief   设置模式状态（用户模式/锁定模式）
+ *
+ * @param[in] user_mode  是否为用户模式
+ * @param[in] now        当前系统时间
+ *
+ * 操作流程：
+ *   1. 根据用户模式设置或清除锁定故障
+ *   2. 切换到相应的系统状态
+ *   3. 更新故障和状态事件标志
+ */
 static void task_control_set_mode_state(bool user_mode, TickType_t now)
 {
   app_core_t *app;
@@ -34,16 +68,30 @@ static void task_control_set_mode_state(bool user_mode, TickType_t now)
   app_task_set_state_bits(s_task_control_cfg.event_group, app->machine.current);
 }
 
+/**
+ * @brief   执行启动自检
+ *
+ * 自检流程：
+ *   1. 发送安全关闭命令
+ *   2. 检查传感器状态（压力、倾斜开关）
+ *   3. 尝试建立压力
+ *   4. 根据自检结果切换到相应状态
+ *
+ * 自检失败情况：
+ *   - 压力传感器故障
+ *   - 倾斜保护触发
+ *   - 压力建立超时
+ */
 static void task_control_run_startup_selftest(void)
 {
-  TickType_t start_tick;
-  TickType_t now;
-  bool user_mode;
-  bool tilt_fault;
-  uint16_t pressure_raw;
-  uint8_t pressure_pct;
-  actuator_cmd_t cmd;
-  app_core_t *app;
+  TickType_t start_tick;    /**< 自检开始时间 */
+  TickType_t now;           /**< 当前系统时间 */
+  bool user_mode;           /**< 用户模式状态 */
+  bool tilt_fault;          /**< 倾斜故障状态 */
+  uint16_t pressure_raw;    /**< 压力传感器原始值 */
+  uint8_t pressure_pct;      /**< 压力百分比值 */
+  actuator_cmd_t cmd;       /**< 执行器命令 */
+  app_core_t *app;          /**< 应用核心实例 */
 
   app = s_task_control_cfg.app;
   if((app == 0) || (s_task_control_cfg.q_actuator == 0))
@@ -68,6 +116,7 @@ static void task_control_run_startup_selftest(void)
     pressure_raw = app->hal.adc.read_raw(app->hal.adc.ctx, SENSOR_PRESSURE);
     pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
 
+    /** 检查压力传感器故障 */
     if(cfg_pressure_sensor_fault(pressure_raw))
     {
       fault_manager_set(&app->faults, FAULT_E1_PRESSURE_BUILD);
@@ -79,6 +128,7 @@ static void task_control_run_startup_selftest(void)
       return;
     }
 
+    /** 检查倾斜保护 */
     if(app->params.tilt_protect_enable && tilt_fault)
     {
       fault_manager_set(&app->faults, FAULT_E2_TILT);
@@ -89,6 +139,7 @@ static void task_control_run_startup_selftest(void)
       return;
     }
 
+    /** 压力达到目标值，自检成功 */
     if(pressure_pct >= CFG_PRESSURE_TARGET_PCT)
     {
       cmd.type = ACT_CMD_SAFE_OFF;
@@ -98,6 +149,7 @@ static void task_control_run_startup_selftest(void)
       return;
     }
 
+    /** 压力建立超时，自检失败 */
     if((now - start_tick) >= pdMS_TO_TICKS(CFG_SELFTEST_PRESSURE_TIMEOUT_MS))
     {
       fault_manager_set(&app->faults, FAULT_E1_PRESSURE_BUILD);
@@ -108,6 +160,7 @@ static void task_control_run_startup_selftest(void)
       return;
     }
 
+    /** 继续尝试建立压力 */
     cmd.type = ACT_CMD_PUMP_ONLY;
     cmd.user_mode = user_mode;
     app_task_queue_send_latest(s_task_control_cfg.q_actuator, &cmd, pdFALSE);
@@ -115,6 +168,13 @@ static void task_control_run_startup_selftest(void)
   }
 }
 
+/**
+ * @brief   初始化控制任务配置
+ *
+ * @param[in] cfg  控制任务配置结构体指针
+ *
+ * 当 cfg == NULL 时，清除配置（用于异常恢复）
+ */
 void app_task_control_init(const app_task_control_cfg_t *cfg)
 {
   if(cfg == 0)
@@ -126,27 +186,44 @@ void app_task_control_init(const app_task_control_cfg_t *cfg)
   s_task_control_cfg = *cfg;
 }
 
+/**
+ * @brief   控制任务主体
+ *
+ * @param[in] pvParameters 未使用（标准 FreeRTOS 接口）
+ *
+ * 主循环逻辑：
+ *   1. 执行启动自检
+ *   2. 定期处理DMX数据
+ *   3. 读取用户输入和传感器数据
+ *   4. 评估安全状态
+ *   5. 根据评估结果执行相应操作
+ *   6. 管理系统状态转换
+ *
+ * 运行模式：
+ *   - 测试模式：通过按键控制执行器
+ *   - 用户模式：通过DMX控制执行器
+ */
 void control_task(void *pvParameters)
 {
-  TickType_t now;
-  EventBits_t bits;
-  actuator_cmd_t cmd;
-  dmx_intent_t intent;
-  safety_eval_input_t in;
-  bool ok;
-  bool user_mode;
-  bool key_menu;
-  bool key_down;
-  bool key_up;
-  bool key_enter;
-  uint16_t pressure_raw;
-  uint8_t pressure_pct;
-  test_action_t test_action;
-  test_action_t last_test_action;
-  edmx_frame_t frame;
-  bool pressure_ready_for_fire;
-  bool pressure_refill_active;
-  app_core_t *app;
+  TickType_t now;                /**< 当前系统时间 */
+  EventBits_t bits;              /**< 事件标志位 */
+  actuator_cmd_t cmd;            /**< 执行器命令 */
+  dmx_intent_t intent;           /**< DMX执行意向 */
+  safety_eval_input_t in;        /**< 安全评估输入 */
+  bool ok;                       /**< 操作结果 */
+  bool user_mode;                /**< 用户模式状态 */
+  bool key_menu;                 /**< 菜单键状态 */
+  bool key_down;                 /**< 下键状态 */
+  bool key_up;                   /**< 上键状态 */
+  bool key_enter;                /**< 确认键状态 */
+  uint16_t pressure_raw;         /**< 压力传感器原始值 */
+  uint8_t pressure_pct;           /**< 压力百分比值 */
+  test_action_t test_action;     /**< 测试操作类型 */
+  test_action_t last_test_action; /**< 上一次测试操作类型 */
+  edmx_frame_t frame;            /**< DMX帧数据 */
+  bool pressure_ready_for_fire;  /**< 压力是否达到点火要求 */
+  bool pressure_refill_active;   /**< 压力补压是否激活 */
+  app_core_t *app;               /**< 应用核心实例 */
   (void)pvParameters;
 
   last_test_action = (test_action_t)0xFF;
@@ -167,6 +244,7 @@ void control_task(void *pvParameters)
     now = xTaskGetTickCount();
     edmx_rx_process(s_task_control_cfg.dmx_rx, (uint32_t)now);
 
+    /** 更新DMX在线状态 */
     if(edmx_rx_is_online(s_task_control_cfg.dmx_rx, (uint32_t)now))
     {
       (void)xEventGroupSetBits(s_task_control_cfg.event_group, EVT_DMX_ONLINE_BIT);
@@ -179,6 +257,7 @@ void control_task(void *pvParameters)
     bits = xEventGroupGetBits(s_task_control_cfg.event_group);
     user_mode = app->hal.input.read(app->hal.input.ctx, INPUT_SAFETY_LOCK);
 
+    /** 处理DMX数据，生成执行意向 */
     ok = edmx_rx_copy_latest(s_task_control_cfg.dmx_rx, &frame);
     if(ok)
     {
@@ -195,6 +274,7 @@ void control_task(void *pvParameters)
       }
     }
 
+    /** 准备安全评估输入 */
     in.latched_fault_mask = app_task_read_fault_mask_from_events(bits);
     in.dmx_online = ((bits & EVT_DMX_ONLINE_BIT) != 0U) ? 1 : 0;
     in.relief_requested = intent.request_relief ? 1 : 0;
@@ -207,6 +287,7 @@ void control_task(void *pvParameters)
     in.pressure_pct = pressure_pct;
     in.pressure_fire_min_pct = CFG_PRESSURE_FIRE_MIN_PCT;
 
+    /** 检查压力传感器故障 */
     if(cfg_pressure_sensor_fault(pressure_raw))
     {
       fault_manager_set(&app->faults, FAULT_E1_PRESSURE_BUILD);
@@ -220,12 +301,14 @@ void control_task(void *pvParameters)
       continue;
     }
 
+    /** 准备执行器命令 */
     cmd.priority = 1U;
     cmd.igniter_delay_ms = app->params.igniter_delay_ms;
     cmd.oil_lock_delay_ms = app->params.oil_lock_delay_ms;
     cmd.fire_duration_ms = intent.fire_duration_ms;
     cmd.user_mode = user_mode;
 
+    /** 非用户模式（测试模式） */
     if(user_mode == false)
     {
       if((s_task_control_cfg.ui_menu_active != 0) && (*s_task_control_cfg.ui_menu_active == true))
@@ -251,6 +334,7 @@ void control_task(void *pvParameters)
       }
       else
       {
+        /** 根据按键或DMX信号确定测试操作 */
         if(key_menu)
         {
           test_action = TEST_ACT_SAFE_OFF;
@@ -287,6 +371,7 @@ void control_task(void *pvParameters)
           test_action = TEST_ACT_SAFE_OFF;
         }
 
+        /** 执行测试操作 */
         if(test_action != last_test_action)
         {
           switch(test_action)
@@ -322,6 +407,7 @@ void control_task(void *pvParameters)
 
     last_test_action = (test_action_t)0xFF;
 
+    /** 用户模式：根据安全评估结果执行操作 */
     switch(safety_guard_eval(&in))
     {
       case SAFETY_FORCE_STOP:
@@ -385,6 +471,7 @@ void control_task(void *pvParameters)
         break;
     }
 
+    /** 设置心跳标志，通知其他任务控制任务正常运行 */
     (void)xEventGroupSetBits(s_task_control_cfg.event_group, s_task_control_cfg.hb_bit);
     vTaskDelay(pdMS_TO_TICKS(10));
   }
