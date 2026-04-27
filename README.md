@@ -215,13 +215,9 @@ edmx_rx_is_online(&rx, now_ms);       // 在线状态
 
 ## 演示
 
-<video src="res/video.mp4" controls width="100%"></video>
+[开机展示与语言切换演示](res/video.mp4)
 
-*开机展示与语言切换演示*
-
-<video src="res/video2.mp4" controls width="100%"></video>
-
-*按键加速演示：长按上下键快速调整参数，SlateUI 按键重复机制*
+[按键加速演示：长按上下键快速调整参数，SlateUI 按键重复机制](res/video2.mp4)
 
 ***
 
