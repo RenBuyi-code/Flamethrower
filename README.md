@@ -97,7 +97,7 @@ project/MDK_V5/         # Keil 工程
 
 #### 对象模型：控件树 + 函数指针（虚函数表）
 
-`sl_Widget` 基类通过函数指针（draw/proc，即 C 语言中的虚函数表）实现不同类型控件的差异化行为，控件以 first-child / next-sibling 构成树形结构：
+`sl_Widget` 基类通过函数指针（draw/proc，类似 C++ 的虚函数表）实现不同类型控件的差异化行为，控件以 first-child / next-sibling 构成树形结构：
 
 ```c
 typedef struct sl_Widget {
