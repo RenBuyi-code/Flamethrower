@@ -60,14 +60,14 @@ extern "C"{
  * @brief st7920 command cmd delay definition
  */
 #ifndef ST7920_COMMAND_CMD_DELAY
-    #define ST7920_COMMAND_CMD_DELAY        100        /**< 100us */
+    #define ST7920_COMMAND_CMD_DELAY        10        /**< 100us */
 #endif
 
 /**
  * @brief st7920 command data delay definition
  */
 #ifndef ST7920_COMMAND_DATA_DELAY
-    #define ST7920_COMMAND_DATA_DELAY        10       /**< 10us */
+    #define ST7920_COMMAND_DATA_DELAY        1       /**< 10us */
 #endif
 
 /**

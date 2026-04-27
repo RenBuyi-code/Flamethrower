@@ -1,7 +1,7 @@
 #ifndef UI_SERVICES_H
 #define UI_SERVICES_H
 
-#include "../domain/machine_state.h"
+#include "rules/state_machine.h"
 #include <stdbool.h>
 #include <stdint.h>
 

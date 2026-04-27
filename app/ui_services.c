@@ -11,7 +11,7 @@
  *   - 提供统一的接口给UI页面
  *   - 作为UI页面和应用核心之间的桥梁
  *   - 与其他模块的关系：
- *     - app_core：获取系统状态
+ *     - app_fsm：获取系统状态
  *     - task_ui：提供服务给UI任务
  *     - UI页面：使用服务获取状态和保存设置
  */
@@ -25,6 +25,20 @@ static ui_machine_snapshot_t s_machine_snapshot;
 static bool s_machine_snapshot_valid;
 /** @brief 设置页面回调函数 */
 static ui_setting_handlers_t s_setting_handlers;
+
+static bool ui_service_snapshot_changed(const ui_machine_snapshot_t *snapshot)
+{
+  return (s_machine_snapshot_valid == false) ||
+         (memcmp(&s_machine_snapshot, snapshot, sizeof(s_machine_snapshot)) != 0);
+}
+
+static void ui_service_call_setting_handler(void (*handler)(int16_t), int16_t value)
+{
+  if(handler != 0)
+  {
+    handler(value);
+  }
+}
 
 /**
  * @brief   设置机器状态快照
@@ -48,8 +62,7 @@ bool ui_service_set_machine_snapshot(const ui_machine_snapshot_t *snapshot)
     return false;
   }
 
-  changed = (s_machine_snapshot_valid == false) ||
-            (memcmp(&s_machine_snapshot, snapshot, sizeof(s_machine_snapshot)) != 0);
+  changed = ui_service_snapshot_changed(snapshot);
 
   s_machine_snapshot = *snapshot;
   s_machine_snapshot_valid = true;
@@ -110,10 +123,7 @@ void ui_service_bind_setting_handlers(const ui_setting_handlers_t *handlers)
  */
 void ui_service_save_dmx_addr(int16_t value)
 {
-  if(s_setting_handlers.save_dmx_addr != 0)
-  {
-    s_setting_handlers.save_dmx_addr(value);
-  }
+  ui_service_call_setting_handler(s_setting_handlers.save_dmx_addr, value);
 }
 
 /**
@@ -127,10 +137,7 @@ void ui_service_save_dmx_addr(int16_t value)
  */
 void ui_service_save_dmx_mode(int16_t value)
 {
-  if(s_setting_handlers.save_dmx_mode != 0)
-  {
-    s_setting_handlers.save_dmx_mode(value);
-  }
+  ui_service_call_setting_handler(s_setting_handlers.save_dmx_mode, value);
 }
 
 /**
@@ -144,10 +151,7 @@ void ui_service_save_dmx_mode(int16_t value)
  */
 void ui_service_save_ign_delay(int16_t value)
 {
-  if(s_setting_handlers.save_ign_delay != 0)
-  {
-    s_setting_handlers.save_ign_delay(value);
-  }
+  ui_service_call_setting_handler(s_setting_handlers.save_ign_delay, value);
 }
 
 /**
@@ -161,10 +165,7 @@ void ui_service_save_ign_delay(int16_t value)
  */
 void ui_service_save_lock_delay(int16_t value)
 {
-  if(s_setting_handlers.save_lock_delay != 0)
-  {
-    s_setting_handlers.save_lock_delay(value);
-  }
+  ui_service_call_setting_handler(s_setting_handlers.save_lock_delay, value);
 }
 
 /**
@@ -178,10 +179,7 @@ void ui_service_save_lock_delay(int16_t value)
  */
 void ui_service_save_tilt_enable(int16_t value)
 {
-  if(s_setting_handlers.save_tilt_enable != 0)
-  {
-    s_setting_handlers.save_tilt_enable(value);
-  }
+  ui_service_call_setting_handler(s_setting_handlers.save_tilt_enable, value);
 }
 
 /**
@@ -195,8 +193,5 @@ void ui_service_save_tilt_enable(int16_t value)
  */
 void ui_service_save_language(int16_t value)
 {
-  if(s_setting_handlers.save_language != 0)
-  {
-    s_setting_handlers.save_language(value);
-  }
+  ui_service_call_setting_handler(s_setting_handlers.save_language, value);
 }

@@ -1,5 +1,5 @@
-#ifndef DOMAIN_SAFETY_GUARD_H
-#define DOMAIN_SAFETY_GUARD_H
+#ifndef APP_RULES_SAFETY_GUARD_H
+#define APP_RULES_SAFETY_GUARD_H
 
 #include <stdint.h>
 

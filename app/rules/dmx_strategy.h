@@ -36,12 +36,12 @@
  *   - intent：执行意向结构，包含 request_fire、request_relief、fire_duration_ms
  */
 
-#ifndef DOMAIN_DMX_STRATEGY_H
-#define DOMAIN_DMX_STRATEGY_H
+#ifndef APP_RULES_DMX_STRATEGY_H
+#define APP_RULES_DMX_STRATEGY_H
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../hal_if/i_types.h"
+#include "../../interfaces/interface_types.h"
 
 /**
  * @brief   将 DMX 通道数据转换为执行意向

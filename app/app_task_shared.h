@@ -3,7 +3,7 @@
 
 #include "../project/inc/freertos_app.h"
 #include "../bsp/at32f415/bsp_at32f415.h"
-#include "../domain/machine_state.h"
+#include "rules/state_machine.h"
 #include <stdbool.h>
 #include <stdint.h>
 

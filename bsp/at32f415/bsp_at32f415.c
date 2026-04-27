@@ -15,7 +15,7 @@
  *   - 提供DMX字节轮询接口
  *   - 提供参数存储和加载接口（带CRC校验）
  *   - 与其他模块的关系：
- *     - app_core：通过bsp_hal_bundle_t使用硬件接口
+ *     - app_fsm：通过bsp_hal_bundle_t使用硬件接口
  *     - bsp_uart：提供DMX串口事件
  */
 

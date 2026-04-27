@@ -2,7 +2,7 @@
 #define UI_IDLE_PAGE_H
 
 #include "../../middleware/SlateUI/core/inc/sl_page.h"
-#include "../../domain/machine_state.h"
+#include "../rules/state_machine.h"
 #include <stdint.h>
 #include <stdbool.h>
 

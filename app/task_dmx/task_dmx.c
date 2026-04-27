@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file    task_dmx.c
  * @brief   DMX512 接收任务 — FreeRTOS 任务实现
  *
@@ -27,12 +27,35 @@
 /** @brief DMX 任务全局配置（静态单例） */
 static app_task_dmx_cfg_t s_task_dmx_cfg;
 
+
+/* Drain all pending DMX bytes from HAL into easyDMX event queue. */
+static void task_dmx_drain_hal_events(app_fsm_t *app, edmx_rx_t *rx)
+{
+  edmx_event_t evt;
+  bool is_break;
+  uint8_t b;
+
+  while(app->hal.dmx.poll_byte(app->hal.dmx.ctx, &b, &is_break))
+  {
+    evt.byte = b;
+    evt.flags = is_break ? EDMX_EVENT_FLAG_BREAK : 0U;
+    (void)edmx_rx_push_event(rx, &evt);
+  }
+}
+
+static void task_dmx_publish_heartbeat(void)
+{
+  if(s_task_dmx_cfg.event_group != 0)
+  {
+    (void)xEventGroupSetBits(s_task_dmx_cfg.event_group, s_task_dmx_cfg.hb_bit);
+  }
+}
+
 /**
- * @brief   初始化 DMX 任务配置
+ * @brief   Initialize DMX task configuration.
  *
- * @param[in] cfg  配置结构体指针（传入后内部拷贝一份）
- *
- * 当 cfg == NULL 时，清除配置（用于异常恢复）
+ * @param[in] cfg Configuration pointer.
+ *                When NULL, clear static configuration for recovery.
  */
 void app_task_dmx_init(const app_task_dmx_cfg_t *cfg)
 {
@@ -75,9 +98,6 @@ void app_task_dmx_init(const app_task_dmx_cfg_t *cfg)
  */
 void dmx_task(void *pvParameters)
 {
-  edmx_event_t evt;
-  bool is_break;
-  uint8_t b;
   (void)pvParameters;
 
   for(;;)
@@ -90,18 +110,10 @@ void dmx_task(void *pvParameters)
     }
 
     /* 从 BSP 层轮询所有待处理事件，推入 easyDMX */
-    while(s_task_dmx_cfg.app->hal.dmx.poll_byte(s_task_dmx_cfg.app->hal.dmx.ctx, &b, &is_break))
-    {
-      evt.byte = b;
-      evt.flags = is_break ? EDMX_EVENT_FLAG_BREAK : 0U;
-      (void)edmx_rx_push_event(s_task_dmx_cfg.rx, &evt);
-    }
+    task_dmx_drain_hal_events(s_task_dmx_cfg.app, s_task_dmx_cfg.rx);
 
     /* 设置心跳标志，通知其他任务 DMX 信号在线 */
-    if(s_task_dmx_cfg.event_group != 0)
-    {
-      (void)xEventGroupSetBits(s_task_dmx_cfg.event_group, s_task_dmx_cfg.hb_bit);
-    }
+    task_dmx_publish_heartbeat();
 
     /* 延时 1ms，防止 CPU 忙等待，同时保持足够的轮询频率 */
     vTaskDelay(pdMS_TO_TICKS(1));

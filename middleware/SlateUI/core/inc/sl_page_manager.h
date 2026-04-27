@@ -22,7 +22,7 @@
 #define SL_MAX_PAGE_DEPTH  8
 
 #ifndef SL_PAGE_TRANSITION_MS
-#define SL_PAGE_TRANSITION_MS 150
+#define SL_PAGE_TRANSITION_MS 0
 #endif
 
 typedef enum {

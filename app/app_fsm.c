@@ -1,5 +1,5 @@
 /**
- * @file    app_core.c
+ * @file    app_fsm.c
  * @brief   应用核心实现
  *
  * 应用核心模块，负责：
@@ -9,16 +9,16 @@
  *   - 记录系统事件
  *
  * 设计思路：
- *   - 保持核心逻辑简洁，将业务规则放在 domain/ 目录
+ *   - 保持核心逻辑简洁，将业务规则放在 app/rules/ 目录
  *   - 集中管理系统状态，确保单一事实来源
  *   - 提供统一的日志和状态转换接口
  *   - 与其他模块的关系：
  *     - bsp/：硬件抽象层，提供底层硬件访问
- *     - domain/：领域模型，包含业务规则
+ *     - app/rules/：领域模型，包含业务规则
  *     - app/task_*：任务模块，使用核心功能
  */
 
-#include "app_core.h"
+#include "app_fsm.h"
 #include "log_rtt.h"
 
 /**
@@ -35,7 +35,7 @@
  *
  * @note    此函数应在系统启动时调用
  */
-void app_core_init(app_core_t *core)
+void app_fsm_init(app_fsm_t *core)
 {
   if(core == 0)
   {
@@ -43,7 +43,7 @@ void app_core_init(app_core_t *core)
   }
 
   bsp_at32f415_bind(&core->hal);
-  machine_state_init(&core->machine);
+  state_machine_init(&core->machine);
   fault_manager_init(&core->faults);
   event_log_init(&core->events);
   cfg_get_default_params(&core->params);
@@ -62,7 +62,7 @@ void app_core_init(app_core_t *core)
  *
  * @note    此函数应在初始化后调用，确保参数正确加载
  */
-void app_core_load_or_default_params(app_core_t *core)
+void app_fsm_load_or_default_params(app_fsm_t *core)
 {
   if(core == 0)
   {
@@ -84,6 +84,41 @@ void app_core_load_or_default_params(app_core_t *core)
            (unsigned)core->params.tilt_protect_enable);
 }
 
+bool app_fsm_apply_params(app_fsm_t *core, const system_params_t *params)
+{
+  if((core == 0) || (params == 0))
+  {
+    return false;
+  }
+
+  core->params = *params;
+  cfg_sanitize_params(&core->params);
+  if(core->hal.storage.save_params(core->hal.storage.ctx, &core->params) == false)
+  {
+    APP_LOGW("params save failed");
+    return false;
+  }
+
+  APP_LOGI("params applied: addr=%u mode=%u ign=%u lock=%u tilt=%u",
+           (unsigned)core->params.dmx_address,
+           (unsigned)core->params.dmx_mode,
+           (unsigned)core->params.igniter_delay_ms,
+           (unsigned)core->params.oil_lock_delay_ms,
+           (unsigned)core->params.tilt_protect_enable);
+  return true;
+}
+
+bool app_fsm_get_params_snapshot(const app_fsm_t *core, system_params_t *out)
+{
+  if((core == 0) || (out == 0))
+  {
+    return false;
+  }
+
+  *out = core->params;
+  return true;
+}
+
 /**
  * @brief   记录系统事件
  *
@@ -93,7 +128,7 @@ void app_core_load_or_default_params(app_core_t *core)
  *
  * @note    此函数将事件推入事件日志队列
  */
-void app_core_log(app_core_t *core, uint16_t code, uint32_t ts_ms)
+void app_fsm_log(app_fsm_t *core, uint16_t code, uint32_t ts_ms)
 {
   if(core == 0)
   {
@@ -121,7 +156,7 @@ void app_core_log(app_core_t *core, uint16_t code, uint32_t ts_ms)
  *
  * @note    状态转换失败时会记录错误事件
  */
-bool app_core_switch_state(app_core_t *core, machine_state_t next, uint16_t event_code, uint32_t ts_ms)
+bool app_fsm_transition(app_fsm_t *core, machine_state_t next, uint16_t event_code, uint32_t ts_ms)
 {
   bool ok;
   machine_state_t from;
@@ -137,10 +172,10 @@ bool app_core_switch_state(app_core_t *core, machine_state_t next, uint16_t even
     return true;
   }
 
-  ok = machine_state_transition(&core->machine, next, event_code);
+  ok = state_machine_transition(&core->machine, next, event_code);
   if(ok)
   {
-    app_core_log(core, event_code, ts_ms);
+    app_fsm_log(core, event_code, ts_ms);
     APP_LOGI("state %u -> %u ev=0x%04X",
              (unsigned)from,
              (unsigned)next,
@@ -148,7 +183,7 @@ bool app_core_switch_state(app_core_t *core, machine_state_t next, uint16_t even
   }
   else
   {
-    app_core_log(core, (uint16_t)(0xF000U | event_code), ts_ms);
+    app_fsm_log(core, (uint16_t)(0xF000U | event_code), ts_ms);
     APP_LOGW("illegal transition state=%u to=%u ev=0x%04X",
              (unsigned)from,
              (unsigned)next,

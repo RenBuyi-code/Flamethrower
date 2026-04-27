@@ -1,5 +1,5 @@
-#ifndef HAL_IF_I_TYPES_H
-#define HAL_IF_I_TYPES_H
+#ifndef INTERFACES_INTERFACE_TYPES_H
+#define INTERFACES_INTERFACE_TYPES_H
 
 #include <stdbool.h>
 #include <stdint.h>

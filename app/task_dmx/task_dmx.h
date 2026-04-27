@@ -44,7 +44,7 @@
 #define APP_TASK_DMX_H
 
 #include "../../project/inc/freertos_app.h"
-#include "../app_core.h"
+#include "../app_fsm.h"
 #include "../../middleware/easyDMX/easy_dmx.h"
 
 /**
@@ -56,7 +56,7 @@
 typedef struct
 {
   /** @brief 应用核心实例（含 HAL 接口和参数）*/
-  app_core_t *app;
+  app_fsm_t *app;
   /** @brief easyDMX 接收器实例（由 app 层分配） */
   edmx_rx_t *rx;
   /** @brief FreeRTOS 事件组（用于通知其他任务 DMX 在线状态）*/

@@ -1,5 +1,5 @@
 /**
- * @file    machine_state.c
+ * @file    state_machine.c
  * @brief   机器状态管理实现
  *
  * 机器状态管理模块，负责：
@@ -16,11 +16,11 @@
  *   - 使用状态机模式管理机器生命周期
  *   - 通过can_move函数定义状态转换规则
  *   - 与其他模块的关系：
- *     - app_core：使用状态机进行状态转换
+ *     - app_fsm：使用状态机进行状态转换
  *     - task_control：响应状态变化执行相应操作
  */
 
-#include "machine_state.h"
+#include "state_machine.h"
 
 /**
  * @brief   检查状态转换是否合法
@@ -71,7 +71,7 @@ static bool can_move(machine_state_t from, machine_state_t to)
  *   2. 清零最后事件代码
  *   3. 清零转换计数
  */
-void machine_state_init(machine_state_ctx_t *ctx)
+void state_machine_init(state_machine_t *ctx)
 {
   if(ctx == 0)
   {
@@ -97,7 +97,7 @@ void machine_state_init(machine_state_ctx_t *ctx)
  *   4. 记录事件代码
  *   5. 增加转换计数
  */
-bool machine_state_transition(machine_state_ctx_t *ctx, machine_state_t to, uint16_t event_code)
+bool state_machine_transition(state_machine_t *ctx, machine_state_t to, uint16_t event_code)
 {
   if(ctx == 0)
   {

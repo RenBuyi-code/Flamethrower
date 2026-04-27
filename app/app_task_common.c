@@ -170,6 +170,7 @@ void app_task_set_fault_bits(EventGroupHandle_t eg, uint32_t mask)
  */
 uint32_t app_task_read_fault_mask_from_events(EventBits_t bits)
 {
+  /* Transitional helper kept for compatibility with old event-bit mirror logic. */
   uint32_t mask;
 
   mask = 0U;

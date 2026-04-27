@@ -1,5 +1,5 @@
 /**
- * @file    i_dmx.h
+ * @file    dmx_rx_if.h
  * @brief   DMX512 接收 HAL 接口层定义
  *
  * 本文件定义了 DMX512 接收的硬件抽象接口，位于 BSP 层与上层协议栈之间。
@@ -14,8 +14,8 @@
  *   3. ctx 用于传递 BSP 层上下文（如 FIFO 句柄）
  */
 
-#ifndef HAL_IF_I_DMX_H
-#define HAL_IF_I_DMX_H
+#ifndef INTERFACES_DMX_RX_IF_H
+#define INTERFACES_DMX_RX_IF_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -45,6 +45,6 @@ typedef struct
    *           - false: FIFO 为空，无数据
    */
   bool (*poll_byte)(void *ctx, uint8_t *byte, bool *is_break);
-} i_dmx_t;
+} dmx_rx_if_t;
 
 #endif

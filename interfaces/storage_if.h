@@ -1,14 +1,14 @@
-#ifndef HAL_IF_I_STORAGE_H
-#define HAL_IF_I_STORAGE_H
+#ifndef INTERFACES_STORAGE_IF_H
+#define INTERFACES_STORAGE_IF_H
 
 #include <stdbool.h>
-#include "i_types.h"
+#include "interface_types.h"
 
 typedef struct
 {
   void *ctx;
   bool (*load_params)(void *ctx, system_params_t *out);
   bool (*save_params)(void *ctx, const system_params_t *in);
-} i_storage_t;
+} storage_if_t;
 
 #endif

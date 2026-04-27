@@ -140,7 +140,6 @@
             <Parameters name="Label" value="IO_IN_WIRELESS"/>
         </Signal>
         <Signal SignalName="GPIO_Input" PinName="PA15">
-            <Parameters name="GPIO_PullType_Set" value="GPIO_PULL_UP"/>
             <Parameters name="Label" value="IO_IN_TILT_SW"/>
         </Signal>
         <Signal SignalName="GPIO_Output" PinName="PB4">

@@ -1,5 +1,5 @@
-#ifndef DOMAIN_MACHINE_STATE_H
-#define DOMAIN_MACHINE_STATE_H
+#ifndef APP_RULES_STATE_MACHINE_H
+#define APP_RULES_STATE_MACHINE_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,9 +20,9 @@ typedef struct
   machine_state_t current;
   uint16_t last_event;
   uint32_t transition_count;
-} machine_state_ctx_t;
+} state_machine_t;
 
-void machine_state_init(machine_state_ctx_t *ctx);
-bool machine_state_transition(machine_state_ctx_t *ctx, machine_state_t to, uint16_t event_code);
+void state_machine_init(state_machine_t *ctx);
+bool state_machine_transition(state_machine_t *ctx, machine_state_t to, uint16_t event_code);
 
 #endif

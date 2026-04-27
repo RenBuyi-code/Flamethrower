@@ -25,7 +25,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../hal_if/i_types.h"
+#include "../interfaces/interface_types.h"
 
 /** @brief DMX地址最小值 */
 #define CFG_DMX_ADDR_MIN                 1U

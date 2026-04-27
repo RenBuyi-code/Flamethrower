@@ -1,5 +1,5 @@
-#ifndef DOMAIN_EVENT_LOG_H
-#define DOMAIN_EVENT_LOG_H
+#ifndef APP_RULES_EVENT_LOG_H
+#define APP_RULES_EVENT_LOG_H
 
 #include <stdint.h>
 

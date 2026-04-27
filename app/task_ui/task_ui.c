@@ -15,7 +15,7 @@
  *   - 定期更新系统状态到UI
  *   - 实现参数修改和保存功能
  *   - 与其他模块的关系：
- *     - app_core：获取系统状态和参数
+ *     - app_fsm：获取系统状态和参数
  *     - task_control：通过menu_active标志通知控制任务
  *     - SlateUI：使用其页面管理和显示功能
  */
@@ -24,9 +24,8 @@
 #include "../ui_services.h"
 #include "../log_rtt.h"
 #include "../../cfg/system_config.h"
-#include "../../domain/dmx_strategy.h"
+#include "../rules/dmx_strategy.h"
 #include "../../middleware/MultiButton/multi_button.h"
-//#define SL_PAGE_TRANSITION_MS 0
 #include "../../middleware/SlateUI/core/inc/sl_display.h"
 #include "../../middleware/SlateUI/core/inc/sl_language.h"
 #include "../../middleware/SlateUI/core/inc/sl_page_registry.h"
@@ -70,20 +69,30 @@ typedef struct
   bool initialized;
 } ui_button_ctx_t;
 
+typedef struct
+{
+  machine_state_t state;
+  uint8_t pressure_pct;
+  bool dmx_online;
+  bool pumping;
+} ui_runtime_sample_t;
+
 /** @brief UI任务全局配置（静态单例） */
 static app_task_ui_cfg_t s_task_ui_cfg;
 /** @brief UI按钮上下文 */
 static ui_button_ctx_t s_ui_btn;
-/** @brief DMX地址影子值（用于设置页面） */
-static int16_t s_shadow_dmx_addr;
-/** @brief DMX模式影子值（用于设置页面） */
-static int16_t s_shadow_dmx_mode;
-/** @brief 点火延迟影子值（用于设置页面） */
-static int16_t s_shadow_ign_delay;
-/** @brief 锁定延迟影子值（用于设置页面） */
-static int16_t s_shadow_lock_delay;
-/** @brief 倾斜保护启用影子值（用于设置页面） */
-static int16_t s_shadow_tilt_enable;
+/** @brief DMX地址草稿值（用于设置页面） */
+static int16_t s_draft_dmx_addr;
+/** @brief DMX模式草稿值（用于设置页面） */
+static int16_t s_draft_dmx_mode;
+/** @brief 点火延迟草稿值（用于设置页面） */
+static int16_t s_draft_ign_delay;
+/** @brief 锁定延迟草稿值（用于设置页面） */
+static int16_t s_draft_lock_delay;
+/** @brief 倾斜保护启用草稿值（用于设置页面） */
+static int16_t s_draft_tilt_enable;
+/** @brief 语言草稿值（用于设置页面） */
+static int16_t s_draft_language;
 /** @brief 页面注册标志 */
 static bool s_ui_pages_registered;
 
@@ -104,22 +113,59 @@ static const sl_PageEntry s_ui_pages[] =
   { "language", ui_language_page_get }     /**< 语言设置页面 */
 };
 
-/**
- * @brief   提交参数修改
- *
- * 操作流程：
- *   1. 对参数进行校验和修正
- *   2. 调用提交回调函数
- */
-static void task_ui_commit_params(void)
+static bool task_ui_apply_params_update(void (*mutator)(system_params_t *params), const char *log_key, uint32_t log_val)
 {
-  if((s_task_ui_cfg.app == 0) || (s_task_ui_cfg.commit_params == 0))
+  system_params_t params;
+
+  if((s_task_ui_cfg.app == 0) || (mutator == 0))
   {
-    return;
+    return false;
   }
 
-  cfg_sanitize_params(&s_task_ui_cfg.app->params);
-  s_task_ui_cfg.commit_params();
+  if(app_fsm_get_params_snapshot(s_task_ui_cfg.app, &params) == false)
+  {
+    return false;
+  }
+
+  mutator(&params);
+  if(app_fsm_apply_params(s_task_ui_cfg.app, &params) == false)
+  {
+    APP_LOGW("%s apply failed", log_key);
+    return false;
+  }
+
+  APP_LOGI("%s=%u", log_key, (unsigned)log_val);
+  return true;
+}
+
+static void task_ui_mutate_dmx_addr(system_params_t *params)
+{
+  params->dmx_address = (uint16_t)s_draft_dmx_addr;
+}
+
+static void task_ui_mutate_dmx_mode(system_params_t *params)
+{
+  params->dmx_mode = (s_draft_dmx_mode == 1) ? DMX_MODE_6CH : DMX_MODE_2CH;
+}
+
+static void task_ui_mutate_ign_delay(system_params_t *params)
+{
+  params->igniter_delay_ms = (uint16_t)s_draft_ign_delay;
+}
+
+static void task_ui_mutate_lock_delay(system_params_t *params)
+{
+  params->oil_lock_delay_ms = (uint16_t)s_draft_lock_delay;
+}
+
+static void task_ui_mutate_tilt_enable(system_params_t *params)
+{
+  params->tilt_protect_enable = (s_draft_tilt_enable != 0) ? true : false;
+}
+
+static void task_ui_mutate_language(system_params_t *params)
+{
+  params->language = (uint8_t)s_draft_language;
 }
 
 /**
@@ -134,9 +180,8 @@ static void task_ui_commit_params(void)
  */
 static void task_ui_save_dmx_addr(int16_t value)
 {
-  s_task_ui_cfg.app->params.dmx_address = (uint16_t)value;
-  APP_LOGI("dmx addr=%u", (unsigned)s_task_ui_cfg.app->params.dmx_address);
-  task_ui_commit_params();
+  s_draft_dmx_addr = value;
+  (void)task_ui_apply_params_update(task_ui_mutate_dmx_addr, "dmx addr", (uint32_t)(uint16_t)value);
 }
 
 /**
@@ -151,9 +196,8 @@ static void task_ui_save_dmx_addr(int16_t value)
  */
 static void task_ui_save_dmx_mode(int16_t value)
 {
-  s_task_ui_cfg.app->params.dmx_mode = (value == 1) ? DMX_MODE_6CH : DMX_MODE_2CH;
-  APP_LOGI("dmx mode=%u", (unsigned)s_task_ui_cfg.app->params.dmx_mode);
-  task_ui_commit_params();
+  s_draft_dmx_mode = value;
+  (void)task_ui_apply_params_update(task_ui_mutate_dmx_mode, "dmx mode", (uint32_t)((value == 1) ? DMX_MODE_6CH : DMX_MODE_2CH));
 }
 
 /**
@@ -168,9 +212,8 @@ static void task_ui_save_dmx_mode(int16_t value)
  */
 static void task_ui_save_ign_delay(int16_t value)
 {
-  s_task_ui_cfg.app->params.igniter_delay_ms = (uint16_t)value;
-  APP_LOGI("ign delay=%u", (unsigned)s_task_ui_cfg.app->params.igniter_delay_ms);
-  task_ui_commit_params();
+  s_draft_ign_delay = value;
+  (void)task_ui_apply_params_update(task_ui_mutate_ign_delay, "ign delay", (uint32_t)(uint16_t)value);
 }
 
 /**
@@ -185,9 +228,8 @@ static void task_ui_save_ign_delay(int16_t value)
  */
 static void task_ui_save_lock_delay(int16_t value)
 {
-  s_task_ui_cfg.app->params.oil_lock_delay_ms = (uint16_t)value;
-  APP_LOGI("lock delay=%u", (unsigned)s_task_ui_cfg.app->params.oil_lock_delay_ms);
-  task_ui_commit_params();
+  s_draft_lock_delay = value;
+  (void)task_ui_apply_params_update(task_ui_mutate_lock_delay, "lock delay", (uint32_t)(uint16_t)value);
 }
 
 /**
@@ -202,9 +244,8 @@ static void task_ui_save_lock_delay(int16_t value)
  */
 static void task_ui_save_tilt_enable(int16_t value)
 {
-  s_task_ui_cfg.app->params.tilt_protect_enable = (value != 0) ? true : false;
-  APP_LOGI("tilt protect=%u", (unsigned)s_task_ui_cfg.app->params.tilt_protect_enable);
-  task_ui_commit_params();
+  s_draft_tilt_enable = value;
+  (void)task_ui_apply_params_update(task_ui_mutate_tilt_enable, "tilt protect", (uint32_t)((value != 0) ? 1U : 0U));
 }
 
 /**
@@ -219,9 +260,8 @@ static void task_ui_save_tilt_enable(int16_t value)
  */
 static void task_ui_save_language(int16_t value)
 {
-  s_task_ui_cfg.app->params.language = (uint8_t)value;
-  APP_LOGI("language=%u", (unsigned)s_task_ui_cfg.app->params.language);
-  task_ui_commit_params();
+  s_draft_language = value;
+  (void)task_ui_apply_params_update(task_ui_mutate_language, "language", (uint32_t)(uint8_t)value);
 }
 
 /**
@@ -331,11 +371,85 @@ static void task_ui_btn_repeat_cb(Button *btn, void *user_data)
   }
 }
 
+static void task_ui_init_draft_params(void)
+{
+  s_draft_dmx_addr = (int16_t)s_task_ui_cfg.app->params.dmx_address;
+  s_draft_dmx_mode = (int16_t)(s_task_ui_cfg.app->params.dmx_mode == DMX_MODE_6CH ? 1 : 0);
+  s_draft_ign_delay = (int16_t)s_task_ui_cfg.app->params.igniter_delay_ms;
+  s_draft_lock_delay = (int16_t)s_task_ui_cfg.app->params.oil_lock_delay_ms;
+  s_draft_tilt_enable = s_task_ui_cfg.app->params.tilt_protect_enable ? 1 : 0;
+  s_draft_language = (int16_t)s_task_ui_cfg.app->params.language;
+}
+
+static void task_ui_bind_page_refs(void)
+{
+  ui_setting_page_set_dmx_refs(&s_draft_dmx_addr, &s_draft_dmx_mode);
+  ui_setting_page_set_pressure_refs(&s_draft_ign_delay, &s_draft_lock_delay);
+  ui_safety_page_set_tilt_ref(&s_draft_tilt_enable);
+}
+
+static void task_ui_bind_setting_handlers(void)
+{
+  ui_setting_handlers_t handlers;
+
+  handlers.save_dmx_addr = task_ui_save_dmx_addr;
+  handlers.save_dmx_mode = task_ui_save_dmx_mode;
+  handlers.save_ign_delay = task_ui_save_ign_delay;
+  handlers.save_lock_delay = task_ui_save_lock_delay;
+  handlers.save_tilt_enable = task_ui_save_tilt_enable;
+  handlers.save_language = task_ui_save_language;
+  ui_service_bind_setting_handlers(&handlers);
+}
+
+static void task_ui_log_initial_button_state(void)
+{
+  uint8_t m;
+  uint8_t d;
+  uint8_t u;
+  uint8_t e;
+
+  m = task_ui_button_level_read(UI_BTN_ID_MENU);
+  d = task_ui_button_level_read(UI_BTN_ID_DOWN);
+  u = task_ui_button_level_read(UI_BTN_ID_UP);
+  e = task_ui_button_level_read(UI_BTN_ID_ENTER);
+  APP_LOGI("btn init state M=%u D=%u U=%u E=%u", (unsigned)m, (unsigned)d, (unsigned)u, (unsigned)e);
+}
+
+static void task_ui_init_buttons(void)
+{
+  button_init(&s_ui_btn.key_menu, task_ui_button_level_read, 1U, UI_BTN_ID_MENU);
+  button_init(&s_ui_btn.key_down, task_ui_button_level_read, 1U, UI_BTN_ID_DOWN);
+  button_init(&s_ui_btn.key_up, task_ui_button_level_read, 1U, UI_BTN_ID_UP);
+  button_init(&s_ui_btn.key_enter, task_ui_button_level_read, 1U, UI_BTN_ID_ENTER);
+
+  button_attach(&s_ui_btn.key_menu, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
+  button_attach(&s_ui_btn.key_down, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
+  button_attach(&s_ui_btn.key_down, BTN_LONG_PRESS_HOLD, task_ui_btn_repeat_cb, 0);
+  button_attach(&s_ui_btn.key_up, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
+  button_attach(&s_ui_btn.key_up, BTN_LONG_PRESS_HOLD, task_ui_btn_repeat_cb, 0);
+  button_attach(&s_ui_btn.key_enter, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
+
+  (void)button_start(&s_ui_btn.key_menu);
+  (void)button_start(&s_ui_btn.key_down);
+  (void)button_start(&s_ui_btn.key_up);
+  (void)button_start(&s_ui_btn.key_enter);
+}
+
+static void task_ui_init_display_and_pages(void)
+{
+  sl_lang_set((int)s_task_ui_cfg.app->params.language);
+  sl_disp_init();
+  sl_disp_fill_rect(0, 0, SL_DISP_WIDTH, 32, 1);
+  sl_disp_flush();
+  task_ui_register_pages_once();
+  sl_ui_init("splash");
+}
+
 /**
  * @brief   UI任务初始化（仅执行一次）
  *
  * 操作流程：
- *   1. 初始化影子参数值
+ *   1. 初始化草稿参数值
  *   2. 设置页面引用
  *   3. 绑定设置页面回调函数
  *   4. 初始化SlateUI和端口
@@ -345,85 +459,106 @@ static void task_ui_btn_repeat_cb(Button *btn, void *user_data)
  */
 static void task_ui_setup_once(void)
 {
-  ui_setting_handlers_t handlers;
-
   if((s_task_ui_cfg.app == 0) || s_ui_btn.initialized)
   {
     return;
   }
 
-  /** 初始化影子参数值 */
-  s_shadow_dmx_addr = (int16_t)s_task_ui_cfg.app->params.dmx_address;
-  s_shadow_dmx_mode = (int16_t)(s_task_ui_cfg.app->params.dmx_mode == DMX_MODE_6CH ? 1 : 0);
-  s_shadow_ign_delay = (int16_t)s_task_ui_cfg.app->params.igniter_delay_ms;
-  s_shadow_lock_delay = (int16_t)s_task_ui_cfg.app->params.oil_lock_delay_ms;
-  s_shadow_tilt_enable = s_task_ui_cfg.app->params.tilt_protect_enable ? 1 : 0;
-
-  /** 设置页面引用 */
-  ui_setting_page_set_dmx_refs(&s_shadow_dmx_addr, &s_shadow_dmx_mode);
-  ui_setting_page_set_pressure_refs(&s_shadow_ign_delay, &s_shadow_lock_delay);
-  ui_safety_page_set_tilt_ref(&s_shadow_tilt_enable);
-
-  /** 绑定设置页面回调函数 */
-  handlers.save_dmx_addr = task_ui_save_dmx_addr;
-  handlers.save_dmx_mode = task_ui_save_dmx_mode;
-  handlers.save_ign_delay = task_ui_save_ign_delay;
-  handlers.save_lock_delay = task_ui_save_lock_delay;
-  handlers.save_tilt_enable = task_ui_save_tilt_enable;
-  handlers.save_language = task_ui_save_language;
-  ui_service_bind_setting_handlers(&handlers);
+  task_ui_init_draft_params();
+  task_ui_bind_page_refs();
+  task_ui_bind_setting_handlers();
 
   /** 初始化SlateUI和端口 */
   sl_port_init();
   sl_port_input_init();
 
-  /** 读取并记录初始按键状态 */
-  {
-    uint8_t m = task_ui_button_level_read(UI_BTN_ID_MENU);
-    uint8_t d = task_ui_button_level_read(UI_BTN_ID_DOWN);
-    uint8_t u = task_ui_button_level_read(UI_BTN_ID_UP);
-    uint8_t e = task_ui_button_level_read(UI_BTN_ID_ENTER);
-    APP_LOGI("btn init state M=%u D=%u U=%u E=%u", (unsigned)m, (unsigned)d, (unsigned)u, (unsigned)e);
-  }
-
-  /** 初始化按键 */
-  button_init(&s_ui_btn.key_menu, task_ui_button_level_read, 1U, UI_BTN_ID_MENU);
-  button_init(&s_ui_btn.key_down, task_ui_button_level_read, 1U, UI_BTN_ID_DOWN);
-  button_init(&s_ui_btn.key_up, task_ui_button_level_read, 1U, UI_BTN_ID_UP);
-  button_init(&s_ui_btn.key_enter, task_ui_button_level_read, 1U, UI_BTN_ID_ENTER);
-
-  /** 绑定按键回调函数 */
-  button_attach(&s_ui_btn.key_menu, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
-  button_attach(&s_ui_btn.key_down, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
-  button_attach(&s_ui_btn.key_down, BTN_LONG_PRESS_HOLD, task_ui_btn_repeat_cb, 0);
-  button_attach(&s_ui_btn.key_up, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
-  button_attach(&s_ui_btn.key_up, BTN_LONG_PRESS_HOLD, task_ui_btn_repeat_cb, 0);
-  button_attach(&s_ui_btn.key_enter, BTN_PRESS_DOWN, task_ui_btn_click_cb, 0);
-
-  /** 启动按键检测 */
-  (void)button_start(&s_ui_btn.key_menu);
-  (void)button_start(&s_ui_btn.key_down);
-  (void)button_start(&s_ui_btn.key_up);
-  (void)button_start(&s_ui_btn.key_enter);
-
-  /** 初始化显示和页面 */
-  sl_lang_set((int)s_task_ui_cfg.app->params.language);
-  sl_disp_init();
-  sl_disp_fill_rect(0, 0, SL_DISP_WIDTH, 32, 1);
-  sl_disp_flush();
-  task_ui_register_pages_once();
-  sl_ui_init("splash");
+  task_ui_log_initial_button_state();
+  task_ui_init_buttons();
+  task_ui_init_display_and_pages();
 
   s_ui_btn.initialized = true;
   APP_LOGI("ui setup done");
 }
 
+
+/* UI page classification helper for menu-active status. */
+static bool task_ui_is_menu_page(const char *page_name)
+{
+  return ((page_name != 0) &&
+          (strcmp(page_name, "idle") != 0) &&
+          (strcmp(page_name, "checking") != 0) &&
+          (strcmp(page_name, "splash") != 0));
+}
+
+static void task_ui_update_menu_active_flag(const char *page_name)
+{
+  if(s_task_ui_cfg.menu_active != 0)
+  {
+    *s_task_ui_cfg.menu_active = task_ui_is_menu_page(page_name);
+  }
+}
+
+static void task_ui_heartbeat_delay(void)
+{
+  (void)xEventGroupSetBits(s_task_ui_cfg.event_group, s_task_ui_cfg.hb_bit);
+  vTaskDelay(pdMS_TO_TICKS(TICKS_INTERVAL));
+}
+
+static void task_ui_collect_runtime(ui_runtime_sample_t *sample)
+{
+  EventBits_t bits;
+  uint16_t pressure_raw;
+  actuator_status_t act_st;
+  BaseType_t act_ok;
+
+  bits = xEventGroupGetBits(s_task_ui_cfg.event_group);
+  pressure_raw = s_task_ui_cfg.app->hal.adc.read_raw(s_task_ui_cfg.app->hal.adc.ctx, SENSOR_PRESSURE);
+  sample->pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
+  sample->dmx_online = ((bits & s_task_ui_cfg.dmx_online_bit) != 0U);
+  sample->state = s_task_ui_cfg.app->machine.current;
+
+  act_ok = xQueuePeek(s_task_ui_cfg.q_actuator_status, &act_st, 0);
+  sample->pumping = ((act_ok == pdTRUE) &&
+                     act_st.out.oil_pump_on &&
+                     (act_st.fire_active == false) &&
+                     (act_st.relief_active == false));
+}
+
+static void task_ui_update_snapshot_and_redraw(const ui_runtime_sample_t *sample)
+{
+  ui_machine_snapshot_t snap;
+  bool snapshot_changed;
+
+  snap.state = sample->state;
+  snap.pressure_pct = sample->pressure_pct;
+  snap.dmx_addr = s_task_ui_cfg.app->params.dmx_address;
+  snap.fault_mask = s_task_ui_cfg.app->faults.latched_mask;
+  snap.dmx_online = sample->dmx_online;
+  snap.pumping = sample->pumping;
+
+  snapshot_changed = ui_service_set_machine_snapshot(&snap);
+  if(snapshot_changed)
+  {
+    sl_ui_request_redraw();
+  }
+}
+
+static void task_ui_run_slate_once(void)
+{
+  uint8_t tick_i;
+
+  for(tick_i = 0U; tick_i < (uint8_t)TICKS_INTERVAL; tick_i++)
+  {
+    sl_ui_tick_up();
+  }
+  sl_ui_run_once();
+}
+
 /**
- * @brief   初始化UI任务配置
+ * @brief   Initialize UI task configuration.
  *
- * @param[in] cfg  UI任务配置结构体指针
- *
- * 当 cfg == NULL 时，清除配置（用于异常恢复）
+ * @param[in] cfg UI task configuration pointer.
+ *                When NULL, clear static configuration for recovery.
  */
 void app_task_ui_init(const app_task_ui_cfg_t *cfg)
 {
@@ -457,65 +592,23 @@ void ui_task(void *pvParameters)
 
   for(;;)
   {
-    uint8_t tick_i;            /**< 循环计数器 */
     const char *page_name;      /**< 当前页面名称 */
-    EventBits_t bits;           /**< 事件标志位 */
-    uint16_t pressure_raw;      /**< 压力传感器原始值 */
-    uint8_t pressure_pct;       /**< 压力百分比值 */
-    bool dmx_online;            /**< DMX在线状态 */
-    machine_state_t st;         /**< 机器状态 */
-    ui_machine_snapshot_t snap;  /**< UI机器状态快照 */
-    bool snapshot_changed;       /**< 快照是否变化 */
-    actuator_status_t act_st;    /**< 执行器状态 */
-    BaseType_t act_ok;           /**< 是否获取到执行器状态 */
-    bool pumping;                /**< 是否正在泵油 */
+    ui_runtime_sample_t sample;  /**< UI运行态采样 */
 
     /** 处理按键事件 */
     button_ticks();
 
-    /** 读取系统状态 */
-    bits = xEventGroupGetBits(s_task_ui_cfg.event_group);
-    pressure_raw = s_task_ui_cfg.app->hal.adc.read_raw(s_task_ui_cfg.app->hal.adc.ctx, SENSOR_PRESSURE);
-    pressure_pct = cfg_pressure_raw_to_percent(pressure_raw);
-    dmx_online = ((bits & s_task_ui_cfg.dmx_online_bit) != 0U);
-    st = s_task_ui_cfg.app->machine.current;
-
-    /** 读取执行器状态 */
-    act_ok = xQueuePeek(s_task_ui_cfg.q_actuator_status, &act_st, 0);
-    pumping = ((act_ok == pdTRUE) && act_st.out.oil_pump_on && (act_st.fire_active == false) && (act_st.relief_active == false));
-
-    /** 更新UI快照 */
-    snap.state = st;
-    snap.pressure_pct = pressure_pct;
-    snap.dmx_addr = s_task_ui_cfg.app->params.dmx_address;
-    snap.fault_mask = s_task_ui_cfg.app->faults.latched_mask;
-    snap.dmx_online = dmx_online;
-    snap.pumping = pumping;
-    snapshot_changed = ui_service_set_machine_snapshot(&snap);
-    if(snapshot_changed)
-    {
-      sl_ui_request_redraw();
-    }
+    task_ui_collect_runtime(&sample);
+    task_ui_update_snapshot_and_redraw(&sample);
 
     /** 运行SlateUI */
-    for(tick_i = 0U; tick_i < (uint8_t)TICKS_INTERVAL; tick_i++)
-    {
-      sl_ui_tick_up();
-    }
-    sl_ui_run_once();
+    task_ui_run_slate_once();
 
     /** 更新菜单活动状态 */
     page_name = sl_ui_current_page();
-    if(s_task_ui_cfg.menu_active != 0)
-    {
-      *s_task_ui_cfg.menu_active = ((page_name != 0) &&
-                                    (strcmp(page_name, "idle") != 0) &&
-                                    (strcmp(page_name, "checking") != 0) &&
-                                    (strcmp(page_name, "splash") != 0));
-    }
+    task_ui_update_menu_active_flag(page_name);
 
     /** 设置心跳标志，通知其他任务UI任务正常运行 */
-    (void)xEventGroupSetBits(s_task_ui_cfg.event_group, s_task_ui_cfg.hb_bit);
-    vTaskDelay(pdMS_TO_TICKS(TICKS_INTERVAL));
+    task_ui_heartbeat_delay();
   }
 }

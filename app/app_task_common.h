@@ -20,7 +20,13 @@
 #define APP_TASK_COMMON_H
 
 #include "app_task_shared.h"
-#include "../domain/fault_manager.h"
+#include "rules/fault_manager.h"
+
+#if defined(__GNUC__) || defined(__clang__)
+#define APP_TASK_DEPRECATED __attribute__((deprecated))
+#else
+#define APP_TASK_DEPRECATED
+#endif
 
 /**
  * @brief   发送最新命令到队列，必要时丢弃旧命令
@@ -61,7 +67,8 @@ void app_task_set_fault_bits(EventGroupHandle_t eg, uint32_t mask);
  *
  * 根据事件标志中的故障位，生成对应的故障掩码
  */
-uint32_t app_task_read_fault_mask_from_events(EventBits_t bits);
+/* Transitional API: deprecated. Prefer app->faults.latched_mask in new code. */
+APP_TASK_DEPRECATED uint32_t app_task_read_fault_mask_from_events(EventBits_t bits);
 
 /**
  * @brief   发送安全关闭命令（高优先级）

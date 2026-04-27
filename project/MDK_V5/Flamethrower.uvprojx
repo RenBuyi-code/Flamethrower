@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>AT32F415CBT7, USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\libraries\drivers\inc;..\..\libraries\cmsis\cm4\core_support;..\..\libraries\cmsis\cm4\device_support;..\inc;../../middlewares/freertos/source/include;../../middlewares/freertos/source/portable/memmang;../../middlewares/freertos/source/portable/GCC/ARM_CM3;..\..\middleware\RTT\RTT;..\..\middleware\RTT\Config;../../app;../../app/task_safety;../../app/task_control;../../app/task_ui;../../app/task_dmx;../../app/ui_pages;../../bsp/at32f415;../../bsp/st7920;../../bsp/st7920/inc;../../cfg;../../domain;../../hal_if;../../middleware/easyDMX;../../middleware/MultiButton;../../middleware/SlateUI/core/inc;../../middleware/SlateUI/widgets/inc;../../middleware/SlateUI/menu/inc;../../middleware/SlateUI/font;../../middleware/SlateUI/port</IncludePath>
+              <IncludePath>..\..\libraries\drivers\inc;..\..\libraries\cmsis\cm4\core_support;..\..\libraries\cmsis\cm4\device_support;..\inc;../../middlewares/freertos/source/include;../../middlewares/freertos/source/portable/memmang;../../middlewares/freertos/source/portable/GCC/ARM_CM3;..\..\middleware\RTT\RTT;..\..\middleware\RTT\Config;../../app;../../app/task_safety;../../app/task_control;../../app/task_ui;../../app/task_dmx;../../app/ui_pages;../../bsp/at32f415;../../bsp/st7920;../../bsp/st7920/inc;../../cfg;../../app/rules;../../interfaces;../../middleware/easyDMX;../../middleware/MultiButton;../../middleware/SlateUI/core/inc;../../middleware/SlateUI/widgets/inc;../../middleware/SlateUI/menu/inc;../../middleware/SlateUI/font;../../middleware/SlateUI/port</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -520,14 +520,24 @@
           <GroupName>app</GroupName>
           <Files>
             <File>
-              <FileName>app_core.c</FileName>
+              <FileName>app_fsm.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\app\app_core.c</FilePath>
+              <FilePath>..\..\app\app_fsm.c</FilePath>
             </File>
             <File>
-              <FileName>app_core.h</FileName>
+              <FileName>app_fsm.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\app\app_core.h</FilePath>
+              <FilePath>..\..\app\app_fsm.h</FilePath>
+            </File>
+            <File>
+              <FileName>app_selftest.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\app\app_selftest.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_selftest.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\app\app_selftest.h</FilePath>
             </File>
             <File>
               <FileName>log_rtt.h</FileName>
@@ -582,57 +592,57 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>domain</GroupName>
+          <GroupName>app_rules</GroupName>
           <Files>
             <File>
               <FileName>event_log.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\domain\event_log.c</FilePath>
+              <FilePath>..\..\app\rules\event_log.c</FilePath>
             </File>
             <File>
               <FileName>event_log.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\domain\event_log.h</FilePath>
+              <FilePath>..\..\app\rules\event_log.h</FilePath>
             </File>
             <File>
-              <FileName>machine_state.c</FileName>
+              <FileName>state_machine.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\domain\machine_state.c</FilePath>
+              <FilePath>..\..\app\rules\state_machine.c</FilePath>
             </File>
             <File>
-              <FileName>machine_state.h</FileName>
+              <FileName>state_machine.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\domain\machine_state.h</FilePath>
+              <FilePath>..\..\app\rules\state_machine.h</FilePath>
             </File>
             <File>
               <FileName>fault_manager.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\domain\fault_manager.c</FilePath>
+              <FilePath>..\..\app\rules\fault_manager.c</FilePath>
             </File>
             <File>
               <FileName>fault_manager.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\domain\fault_manager.h</FilePath>
+              <FilePath>..\..\app\rules\fault_manager.h</FilePath>
             </File>
             <File>
               <FileName>safety_guard.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\domain\safety_guard.c</FilePath>
+              <FilePath>..\..\app\rules\safety_guard.c</FilePath>
             </File>
             <File>
               <FileName>safety_guard.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\domain\safety_guard.h</FilePath>
+              <FilePath>..\..\app\rules\safety_guard.h</FilePath>
             </File>
             <File>
               <FileName>dmx_strategy.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\domain\dmx_strategy.c</FilePath>
+              <FilePath>..\..\app\rules\dmx_strategy.c</FilePath>
             </File>
             <File>
               <FileName>dmx_strategy.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\domain\dmx_strategy.h</FilePath>
+              <FilePath>..\..\app\rules\dmx_strategy.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -773,6 +783,26 @@
               <FileName>task_dmx.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\app\task_dmx\task_dmx.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>app/task_actuator</GroupName>
+          <Files>
+            <File>
+              <FileName>task_actuator.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\app\task_actuator\task_actuator.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>app/task_diag</GroupName>
+          <Files>
+            <File>
+              <FileName>task_diag.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\app\task_diag\task_diag.c</FilePath>
             </File>
           </Files>
         </Group>

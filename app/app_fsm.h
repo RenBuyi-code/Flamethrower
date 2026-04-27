@@ -1,9 +1,9 @@
 /**
- * @file    app_core.h
+ * @file    app_fsm.h
  * @brief   应用核心头文件
  *
  * 应用核心模块的头文件，定义了：
- *   - 应用核心结构体（app_core_t）
+ *   - 应用核心结构体（app_fsm_t）
  *   - 核心功能函数声明
  *
  * 设计思路：
@@ -19,16 +19,16 @@
  *   - 系统参数：用户配置和运行参数
  */
 
-#ifndef APP_APP_CORE_H
-#define APP_APP_CORE_H
+#ifndef APP_APP_FSM_H
+#define APP_APP_FSM_H
 
 #include <stdbool.h>
 #include <stdint.h>
 #include "../bsp/at32f415/bsp_at32f415.h"
 #include "../cfg/system_config.h"
-#include "../domain/event_log.h"
-#include "../domain/fault_manager.h"
-#include "../domain/machine_state.h"
+#include "rules/event_log.h"
+#include "rules/fault_manager.h"
+#include "rules/state_machine.h"
 
 /**
  * @brief   应用核心结构体
@@ -47,14 +47,14 @@ typedef struct
   /** @brief 硬件抽象层绑定，提供底层硬件访问接口 */
   bsp_hal_bundle_t hal;
   /** @brief 机器状态管理，处理系统状态转换 */
-  machine_state_ctx_t machine;
+  state_machine_t machine;
   /** @brief 故障管理，检测和处理系统故障 */
   fault_manager_t faults;
   /** @brief 事件日志，记录系统事件 */
   event_log_t events;
   /** @brief 系统参数，包含用户配置和运行参数 */
   system_params_t params;
-} app_core_t;
+} app_fsm_t;
 
 /**
  * @brief   初始化应用核心
@@ -63,7 +63,7 @@ typedef struct
  *
  * 初始化系统各组件，包括HAL绑定、状态机、故障管理、事件日志和默认参数。
  */
-void app_core_init(app_core_t *core);
+void app_fsm_init(app_fsm_t *core);
 
 /**
  * @brief   加载参数或使用默认值
@@ -72,7 +72,10 @@ void app_core_init(app_core_t *core);
  *
  * 尝试从存储中加载参数，失败则使用默认值，并对参数进行校验和修正。
  */
-void app_core_load_or_default_params(app_core_t *core);
+void app_fsm_load_or_default_params(app_fsm_t *core);
+
+bool app_fsm_apply_params(app_fsm_t *core, const system_params_t *params);
+bool app_fsm_get_params_snapshot(const app_fsm_t *core, system_params_t *out);
 
 /**
  * @brief   记录系统事件
@@ -83,7 +86,7 @@ void app_core_load_or_default_params(app_core_t *core);
  *
  * 将系统事件推入事件日志队列。
  */
-void app_core_log(app_core_t *core, uint16_t code, uint32_t ts_ms);
+void app_fsm_log(app_fsm_t *core, uint16_t code, uint32_t ts_ms);
 
 /**
  * @brief   切换机器状态
@@ -96,6 +99,6 @@ void app_core_log(app_core_t *core, uint16_t code, uint32_t ts_ms);
  *
  * 执行状态转换，记录状态转换事件，并输出日志。
  */
-bool app_core_switch_state(app_core_t *core, machine_state_t next, uint16_t event_code, uint32_t ts_ms);
+bool app_fsm_transition(app_fsm_t *core, machine_state_t next, uint16_t event_code, uint32_t ts_ms);
 
 #endif

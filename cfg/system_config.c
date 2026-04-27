@@ -13,12 +13,12 @@
  *   - 确保参数在合理范围内
  *   - 提供传感器状态检查函数
  *   - 与其他模块的关系：
- *     - domain/dmx_strategy：用于计算DMX最大地址
- *     - app_core：使用参数配置系统
+ *     - app/rules/dmx_strategy：用于计算DMX最大地址
+ *     - app_fsm：使用参数配置系统
  */
 
 #include "system_config.h"
-#include "../domain/dmx_strategy.h"
+#include "../app/rules/dmx_strategy.h"
 
 /**
  * @brief   限制无符号16位数值在范围内

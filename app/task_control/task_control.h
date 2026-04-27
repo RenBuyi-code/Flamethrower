@@ -2,13 +2,13 @@
 #define APP_TASK_CONTROL_H
 
 #include "../../project/inc/freertos_app.h"
-#include "../app_core.h"
+#include "../app_fsm.h"
 #include "../app_task_shared.h"
 #include "../../middleware/easyDMX/easy_dmx.h"
 
 typedef struct
 {
-  app_core_t *app;
+  app_fsm_t *app;
   edmx_rx_t *dmx_rx;
   QueueHandle_t q_actuator;
   EventGroupHandle_t event_group;

@@ -1,5 +1,5 @@
-#ifndef DOMAIN_FAULT_MANAGER_H
-#define DOMAIN_FAULT_MANAGER_H
+#ifndef APP_RULES_FAULT_MANAGER_H
+#define APP_RULES_FAULT_MANAGER_H
 
 #include <stdbool.h>
 #include <stdint.h>

@@ -21,7 +21,7 @@
  *   - 返回最严重的安全动作
  *   - 与其他模块的关系：
  *     - app/task_control：使用评估结果决定执行动作
- *     - domain/fault_manager：查询故障状态
+ *     - app/rules/fault_manager：查询故障状态
  */
 
 #include "safety_guard.h"
