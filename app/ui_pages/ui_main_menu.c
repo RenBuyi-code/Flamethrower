@@ -23,14 +23,14 @@ static const uint8_t s_item_ids[UI_MENU_ITEM_COUNT] = {
 
 static const char *s_item_names[UI_MENU_ITEM_COUNT] = {
     "DMX",
-    "Pressure",
+    "Delay",
     "Tilt",
     "Language"
 };
 
 static const char *s_item_targets[UI_MENU_ITEM_COUNT] = {
     "dmx_set",
-    "pressure_set",
+    "delay_set",
     "safety",
     "language"
 };

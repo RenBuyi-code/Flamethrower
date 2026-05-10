@@ -27,8 +27,8 @@ typedef struct
 } ui_setting_cfg_t;
 
 sl_Page *ui_setting_page_get_dmx(void);
-sl_Page *ui_setting_page_get_pressure(void);
+sl_Page *ui_setting_page_get_delay(void);
 void ui_setting_page_set_dmx_refs(int16_t *addr, int16_t *mode);
-void ui_setting_page_set_pressure_refs(int16_t *ign, int16_t *lock);
+void ui_setting_page_set_delay_refs(int16_t *ign, int16_t *lock);
 
 #endif

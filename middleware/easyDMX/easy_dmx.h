@@ -140,6 +140,7 @@ typedef struct
   uint32_t frames_long;
   /** @brief 非标准帧数（Start Code ≠ 0，不是我方 DMX 信号） */
   uint32_t frames_nonzero_start;
+  uint8_t last_rejected_start_code;
   /** @brief 事件 FIFO 溢出次数（下层喂入过快） */
   uint32_t fifo_overruns;
   /** @brief 丢弃的字节总数 */

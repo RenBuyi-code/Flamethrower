@@ -62,8 +62,8 @@ void cfg_get_default_params(system_params_t *params)
   }
   params->dmx_address = 1U;
   params->dmx_mode = DMX_MODE_2CH;
-  params->igniter_delay_ms = 0U;
-  params->oil_lock_delay_ms = 0U;
+  params->igniter_delay_sec = 0U;
+  params->oil_lock_delay_sec = 0U;
   params->tilt_protect_enable = true;
   params->language = 1; /* SL_LANG_CN */
 }
@@ -104,8 +104,8 @@ void cfg_sanitize_params(system_params_t *params)
 
   /** 限制各参数在有效范围内 */
   params->dmx_address = clamp_u16(params->dmx_address, CFG_DMX_ADDR_MIN, max_addr);
-  params->igniter_delay_ms = clamp_u16(params->igniter_delay_ms, CFG_DELAY_MIN_MS, CFG_DELAY_MAX_MS);
-  params->oil_lock_delay_ms = clamp_u16(params->oil_lock_delay_ms, CFG_DELAY_MIN_MS, CFG_DELAY_MAX_MS);
+  params->igniter_delay_sec = clamp_u16(params->igniter_delay_sec, CFG_DELAY_MIN_SEC, CFG_DELAY_MAX_SEC);
+  params->oil_lock_delay_sec = clamp_u16(params->oil_lock_delay_sec, CFG_DELAY_MIN_SEC, CFG_DELAY_MAX_SEC);
 }
 
 /**

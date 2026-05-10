@@ -33,8 +33,8 @@ typedef struct
 {
   uint16_t dmx_address;
   dmx_mode_t dmx_mode;
-  uint16_t igniter_delay_ms;
-  uint16_t oil_lock_delay_ms;
+  uint16_t igniter_delay_sec;
+  uint16_t oil_lock_delay_sec;
   bool tilt_protect_enable;
   uint8_t language;
 } system_params_t;

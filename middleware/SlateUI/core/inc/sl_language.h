@@ -52,11 +52,11 @@ enum {
     SL_STR_CN,             /**< "中文" / "Chinese" */
     SL_STR_EN,             /**< "英文" / "English" */
     SL_STR_DMX_SET,        /**< "DMX设置" / "DMX Set" */
-    SL_STR_PRESSURE_SET,   /**< "压力设置" / "Pressure Set" */
+    SL_STR_PRESSURE_SET,   /**< "喷火设置" / "Fire Set" */
     SL_STR_PRESS_MENU,     /**< "按MENU菜单" / "Press MENU" */
     SL_STR_READY,          /**< "就绪" / "Ready" */
     SL_STR_FLT,            /**< "故障" / "Fault" */
-    SL_STR_FIRE,           /**< "喷射" / "Firing" */
+    SL_STR_FIRE,           /**< "喷火中" / "Firing" */
     SL_STR_STOPPED,        /**< "停止" / "Stopped" */
     SL_STR_LOCKED,         /**< "锁定" / "Locked" */
     SL_STR_MS,             /**< "毫秒" / "ms" */

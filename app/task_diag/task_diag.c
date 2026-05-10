@@ -53,8 +53,8 @@ void diag_task(void *pvParameters)
         cmd.type = ACT_CMD_SAFE_OFF;
         cmd.priority = 10U;
         cmd.user_mode = false;
-        cmd.igniter_delay_ms = 0U;
-        cmd.oil_lock_delay_ms = 0U;
+        cmd.igniter_delay_sec = 0U;
+        cmd.oil_lock_delay_sec = 0U;
         cmd.fire_duration_ms = 0U;
         app_task_queue_send_latest(s_task_diag_cfg.q_actuator, &cmd, pdTRUE);
       }

@@ -66,6 +66,7 @@ typedef struct
 
 /** @brief 全局唯一软件 FIFO 实例，静态分配于 .bss 段 */
 static bsp_uart_dmx_fifo_t s_bsp_uart_dmx_fifo;
+static volatile bsp_uart_dmx_stats_t s_bsp_uart_dmx_stats;
 
 /**
  * @brief   重置软件 FIFO（仅初始化时调用）
@@ -78,6 +79,13 @@ static void bsp_uart_dmx_fifo_reset(void)
   s_bsp_uart_dmx_fifo.head = 0U;
   s_bsp_uart_dmx_fifo.tail = 0U;
   s_bsp_uart_dmx_fifo.overrun_count = 0U;
+  s_bsp_uart_dmx_stats.irq_count = 0U;
+  s_bsp_uart_dmx_stats.rx_bytes = 0U;
+  s_bsp_uart_dmx_stats.break_count = 0U;
+  s_bsp_uart_dmx_stats.ferr_count = 0U;
+  s_bsp_uart_dmx_stats.nerr_count = 0U;
+  s_bsp_uart_dmx_stats.roerr_count = 0U;
+  s_bsp_uart_dmx_stats.fifo_overruns = 0U;
 }
 
 /**
@@ -101,6 +109,7 @@ static void bsp_uart_dmx_fifo_push_isr(uint8_t byte, bool is_break)
   if(next_head == s_bsp_uart_dmx_fifo.tail)
   {
     s_bsp_uart_dmx_fifo.overrun_count++;
+    s_bsp_uart_dmx_stats.fifo_overruns++;
     return;
   }
 
@@ -133,30 +142,40 @@ void bsp_uart_dmx_init(void)
  */
 void bsp_uart_dmx_irq_handler(void)
 {
-  uint32_t err_flags;
+  bool ferr;
+  bool nerr;
+  bool roerr;
+  bool bff;
+  bool rdbf;
   bool has_break;
 
   /* 汇总所有错误标志：帧错误 + Break + 噪声 + 溢出 */
-  err_flags = USART_FERR_FLAG | USART_NERR_FLAG | USART_ROERR_FLAG | USART_BFF_FLAG;
-  has_break = ((usart_flag_get(USART1, USART_FERR_FLAG) == SET) || (usart_flag_get(USART1, USART_BFF_FLAG) == SET));
+  s_bsp_uart_dmx_stats.irq_count++;
+  ferr = (usart_flag_get(USART1, USART_FERR_FLAG) == SET);
+  nerr = (usart_flag_get(USART1, USART_NERR_FLAG) == SET);
+  roerr = (usart_flag_get(USART1, USART_ROERR_FLAG) == SET);
+  bff = (usart_flag_get(USART1, USART_BFF_FLAG) == SET);
+  rdbf = (usart_flag_get(USART1, USART_RDBF_FLAG) == SET);
+  has_break = ferr;
+
+  if(ferr) { s_bsp_uart_dmx_stats.ferr_count++; }
+  if(nerr) { s_bsp_uart_dmx_stats.nerr_count++; }
+  if(roerr) { s_bsp_uart_dmx_stats.roerr_count++; }
 
   /* ---- 分支一：发生错误（通常为 Break 信号期间的低电平误判） ---- */
-  if((usart_flag_get(USART1, USART_FERR_FLAG) == SET)
-     || (usart_flag_get(USART1, USART_BFF_FLAG) == SET)
-     || (usart_flag_get(USART1, USART_NERR_FLAG) == SET)
-     || (usart_flag_get(USART1, USART_ROERR_FLAG) == SET))
+  if(ferr || nerr || roerr)
   {
-    usart_flag_clear(USART1, err_flags);
+    if(rdbf)
+    {
+      s_bsp_uart_dmx_stats.rx_bytes++;
+    }
+    usart_flag_clear(USART1, USART_FERR_FLAG | USART_NERR_FLAG | USART_ROERR_FLAG);
 
     /* 读取并丢弃 RDBF 中的假字节（Break 期间接收到的垃圾数据）*/
-    if(usart_flag_get(USART1, USART_RDBF_FLAG) == SET)
-    {
-      (void)usart_data_receive(USART1);
-    }
-
     /* 识别到 Break 信号：向 FIFO 压入 Break 标记事件 */
     if(has_break)
     {
+      s_bsp_uart_dmx_stats.break_count++;
       bsp_uart_dmx_fifo_push_isr(0U, true);
     }
     return;
@@ -165,6 +184,7 @@ void bsp_uart_dmx_irq_handler(void)
   /* ---- 分支二：正常字节接收 ---- */
   if(usart_flag_get(USART1, USART_RDBF_FLAG) == SET)
   {
+    s_bsp_uart_dmx_stats.rx_bytes++;
     bsp_uart_dmx_fifo_push_isr((uint8_t)usart_data_receive(USART1), false);
   }
 }
@@ -204,4 +224,22 @@ bool bsp_uart_dmx_poll_event(bsp_uart_dmx_event_t *out)
   __enable_irq();
 
   return true;
+}
+
+void bsp_uart_dmx_get_stats(bsp_uart_dmx_stats_t *out)
+{
+  if(out == 0)
+  {
+    return;
+  }
+
+  __disable_irq();
+  out->irq_count = s_bsp_uart_dmx_stats.irq_count;
+  out->rx_bytes = s_bsp_uart_dmx_stats.rx_bytes;
+  out->break_count = s_bsp_uart_dmx_stats.break_count;
+  out->ferr_count = s_bsp_uart_dmx_stats.ferr_count;
+  out->nerr_count = s_bsp_uart_dmx_stats.nerr_count;
+  out->roerr_count = s_bsp_uart_dmx_stats.roerr_count;
+  out->fifo_overruns = s_bsp_uart_dmx_stats.fifo_overruns;
+  __enable_irq();
 }

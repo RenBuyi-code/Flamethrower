@@ -51,6 +51,17 @@ typedef struct
   bool is_break;
 } bsp_uart_dmx_event_t;
 
+typedef struct
+{
+  uint32_t irq_count;
+  uint32_t rx_bytes;
+  uint32_t break_count;
+  uint32_t ferr_count;
+  uint32_t nerr_count;
+  uint32_t roerr_count;
+  uint32_t fifo_overruns;
+} bsp_uart_dmx_stats_t;
+
 /**
  * @brief   初始化 DMX 串口接收
  *
@@ -89,5 +100,7 @@ void bsp_uart_dmx_irq_handler(void);
  *          确保在中断与任务之间安全共享 FIFO
  */
 bool bsp_uart_dmx_poll_event(bsp_uart_dmx_event_t *out);
+
+void bsp_uart_dmx_get_stats(bsp_uart_dmx_stats_t *out);
 
 #endif

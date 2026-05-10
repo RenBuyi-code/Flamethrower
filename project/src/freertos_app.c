@@ -61,7 +61,7 @@ static EventGroupHandle_t eg_system;
 static app_fsm_t g_app;
 
 static edmx_rx_t s_dmx_rx;
-static uint8_t s_dmx_fifo_storage[1024];
+static uint8_t s_dmx_fifo_storage[2048];
 
 static uint32_t g_ui_perf_last_cycles;
 static uint32_t g_ui_perf_monotonic_us;

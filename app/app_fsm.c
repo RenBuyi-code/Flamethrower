@@ -79,8 +79,8 @@ void app_fsm_load_or_default_params(app_fsm_t *core)
   APP_LOGI("params: addr=%u mode=%u ign=%u lock=%u tilt=%u",
            (unsigned)core->params.dmx_address,
            (unsigned)core->params.dmx_mode,
-           (unsigned)core->params.igniter_delay_ms,
-           (unsigned)core->params.oil_lock_delay_ms,
+           (unsigned)core->params.igniter_delay_sec,
+           (unsigned)core->params.oil_lock_delay_sec,
            (unsigned)core->params.tilt_protect_enable);
 }
 
@@ -102,8 +102,8 @@ bool app_fsm_apply_params(app_fsm_t *core, const system_params_t *params)
   APP_LOGI("params applied: addr=%u mode=%u ign=%u lock=%u tilt=%u",
            (unsigned)core->params.dmx_address,
            (unsigned)core->params.dmx_mode,
-           (unsigned)core->params.igniter_delay_ms,
-           (unsigned)core->params.oil_lock_delay_ms,
+           (unsigned)core->params.igniter_delay_sec,
+           (unsigned)core->params.oil_lock_delay_sec,
            (unsigned)core->params.tilt_protect_enable);
   return true;
 }

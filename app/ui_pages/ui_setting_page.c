@@ -243,15 +243,15 @@ static void dmx_cfg_init(void)
   s_dmx_cfg.fields[1].on_save = ui_service_save_dmx_mode;
 }
 
-static void pressure_cfg_init(void)
+static void delay_cfg_init(void)
 {
-  s_pressure_cfg.title = "Pressure Set";
+  s_pressure_cfg.title = "Delay Set";
 
   s_pressure_cfg.fields[0].label = 0;
   s_pressure_cfg.fields[0].label_id = SL_STR_IGN;
   s_pressure_cfg.fields[0].min_val = 0;
-  s_pressure_cfg.fields[0].max_val = 200;
-  s_pressure_cfg.fields[0].step = 10;
+  s_pressure_cfg.fields[0].max_val = 120;
+  s_pressure_cfg.fields[0].step = 1;
   s_pressure_cfg.fields[0].choices = 0;
   s_pressure_cfg.fields[0].choice_cnt = 0;
   s_pressure_cfg.fields[0].on_save = ui_service_save_ign_delay;
@@ -259,8 +259,8 @@ static void pressure_cfg_init(void)
   s_pressure_cfg.fields[1].label = 0;
   s_pressure_cfg.fields[1].label_id = SL_STR_LOCK;
   s_pressure_cfg.fields[1].min_val = 0;
-  s_pressure_cfg.fields[1].max_val = 200;
-  s_pressure_cfg.fields[1].step = 10;
+  s_pressure_cfg.fields[1].max_val = 120;
+  s_pressure_cfg.fields[1].step = 1;
   s_pressure_cfg.fields[1].choices = 0;
   s_pressure_cfg.fields[1].choice_cnt = 0;
   s_pressure_cfg.fields[1].on_save = ui_service_save_lock_delay;
@@ -295,9 +295,9 @@ void ui_setting_page_set_dmx_refs(int16_t *addr, int16_t *mode)
   s_dmx_cfg.fields[1].value = mode;
 }
 
-void ui_setting_page_set_pressure_refs(int16_t *ign, int16_t *lock)
+void ui_setting_page_set_delay_refs(int16_t *ign, int16_t *lock)
 {
-  pressure_cfg_init();
+  delay_cfg_init();
   s_pressure_cfg.fields[0].value = ign;
   s_pressure_cfg.fields[1].value = lock;
 }
@@ -308,8 +308,8 @@ sl_Page *ui_setting_page_get_dmx(void)
   return uis_page_setup(&s_dmx_page, &s_dmx_priv, &s_dmx_cfg);
 }
 
-sl_Page *ui_setting_page_get_pressure(void)
+sl_Page *ui_setting_page_get_delay(void)
 {
-  pressure_cfg_init();
+  delay_cfg_init();
   return uis_page_setup(&s_pressure_page, &s_pressure_priv, &s_pressure_cfg);
 }

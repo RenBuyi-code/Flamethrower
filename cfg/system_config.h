@@ -31,10 +31,10 @@
 #define CFG_DMX_ADDR_MIN                 1U
 /** @brief DMX地址最大值 */
 #define CFG_DMX_ADDR_MAX                 512U
-/** @brief 延迟时间最小值（毫秒） */
-#define CFG_DELAY_MIN_MS                 0U
-/** @brief 延迟时间最大值（毫秒） */
-#define CFG_DELAY_MAX_MS                 200U
+/** @brief 延迟时间最小值（秒） */
+#define CFG_DELAY_MIN_SEC                0U
+/** @brief 延迟时间最大值（秒） */
+#define CFG_DELAY_MAX_SEC                120U
 
 /**
  * @brief   压力传感器参数
@@ -74,11 +74,11 @@
 #define CFG_PRESSURE_RELIEF_DONE_PCT     5U
 
 /** @brief 压力建立错误超时时间（毫秒） */
-#define CFG_PRESSURE_ERROR_TIMEOUT_MS    13000U
+#define CFG_PRESSURE_ERROR_TIMEOUT_MS    30000U
 /** @brief 泄压错误超时时间（毫秒） */
 #define CFG_RELIEF_ERROR_TIMEOUT_MS      2000U
 /** @brief 自检压力建立超时时间（毫秒） */
-#define CFG_SELFTEST_PRESSURE_TIMEOUT_MS 13000U
+#define CFG_SELFTEST_PRESSURE_TIMEOUT_MS 30000U
 
 /** @brief DMX信号丢失超时时间（毫秒） */
 #define CFG_DMX_LOST_TIMEOUT_MS          500U

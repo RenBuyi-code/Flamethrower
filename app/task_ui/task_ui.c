@@ -108,7 +108,7 @@ static const sl_PageEntry s_ui_pages[] =
   { "idle", ui_idle_page_get },            /**< 空闲页面 */
   { "main_menu", ui_main_menu_get },       /**< 主菜单页面 */
   { "dmx_set", ui_setting_page_get_dmx },  /**< DMX设置页面 */
-  { "pressure_set", ui_setting_page_get_pressure },  /**< 压力设置页面 */
+  { "delay_set", ui_setting_page_get_delay },  /**< 延时设置页面 */
   { "safety", ui_safety_page_get },        /**< 安全页面 */
   { "language", ui_language_page_get }     /**< 语言设置页面 */
 };
@@ -150,12 +150,12 @@ static void task_ui_mutate_dmx_mode(system_params_t *params)
 
 static void task_ui_mutate_ign_delay(system_params_t *params)
 {
-  params->igniter_delay_ms = (uint16_t)s_draft_ign_delay;
+  params->igniter_delay_sec = (uint16_t)s_draft_ign_delay;
 }
 
 static void task_ui_mutate_lock_delay(system_params_t *params)
 {
-  params->oil_lock_delay_ms = (uint16_t)s_draft_lock_delay;
+  params->oil_lock_delay_sec = (uint16_t)s_draft_lock_delay;
 }
 
 static void task_ui_mutate_tilt_enable(system_params_t *params)
@@ -375,8 +375,8 @@ static void task_ui_init_draft_params(void)
 {
   s_draft_dmx_addr = (int16_t)s_task_ui_cfg.app->params.dmx_address;
   s_draft_dmx_mode = (int16_t)(s_task_ui_cfg.app->params.dmx_mode == DMX_MODE_6CH ? 1 : 0);
-  s_draft_ign_delay = (int16_t)s_task_ui_cfg.app->params.igniter_delay_ms;
-  s_draft_lock_delay = (int16_t)s_task_ui_cfg.app->params.oil_lock_delay_ms;
+  s_draft_ign_delay = (int16_t)s_task_ui_cfg.app->params.igniter_delay_sec;
+  s_draft_lock_delay = (int16_t)s_task_ui_cfg.app->params.oil_lock_delay_sec;
   s_draft_tilt_enable = s_task_ui_cfg.app->params.tilt_protect_enable ? 1 : 0;
   s_draft_language = (int16_t)s_task_ui_cfg.app->params.language;
 }
@@ -384,7 +384,7 @@ static void task_ui_init_draft_params(void)
 static void task_ui_bind_page_refs(void)
 {
   ui_setting_page_set_dmx_refs(&s_draft_dmx_addr, &s_draft_dmx_mode);
-  ui_setting_page_set_pressure_refs(&s_draft_ign_delay, &s_draft_lock_delay);
+  ui_setting_page_set_delay_refs(&s_draft_ign_delay, &s_draft_lock_delay);
   ui_safety_page_set_tilt_ref(&s_draft_tilt_enable);
 }
 

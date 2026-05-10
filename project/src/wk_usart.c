@@ -69,7 +69,6 @@ void wk_usart1_init(void)
   bsp_uart_dmx_init();
   usart_interrupt_enable(USART1, USART_RDBF_INT, TRUE);
   usart_interrupt_enable(USART1, USART_ERR_INT, TRUE);
-  usart_interrupt_enable(USART1, USART_BF_INT, TRUE);
   NVIC_SetPriority(USART1_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 6, 0));
   NVIC_EnableIRQ(USART1_IRQn);
 

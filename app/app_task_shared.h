@@ -20,8 +20,8 @@ typedef struct
   actuator_cmd_type_t type;
   uint8_t priority;
   bool user_mode;
-  uint16_t igniter_delay_ms;
-  uint16_t oil_lock_delay_ms;
+  uint16_t igniter_delay_sec;
+  uint16_t oil_lock_delay_sec;
   uint16_t fire_duration_ms;
 } actuator_cmd_t;
 

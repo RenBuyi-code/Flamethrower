@@ -117,6 +117,7 @@ static void finalize_frame(edmx_rx_t *rx, uint32_t now_ms)
   if(rx->parser_start_code != 0U)
   {
     rx->stats.frames_nonzero_start++;
+    rx->stats.last_rejected_start_code = rx->parser_start_code;
     return;
   }
 
@@ -288,6 +289,12 @@ void edmx_rx_process(edmx_rx_t *rx, uint32_t now_ms)
     /* ---- 分支二：Start Code（Break 后的第一个字节） ---- */
     if(rx->parser_has_start_code == false)
     {
+      if(evt.byte != 0U)
+      {
+        rx->stats.frames_nonzero_start++;
+        rx->stats.last_rejected_start_code = evt.byte;
+        continue;
+      }
       rx->parser_has_start_code = true;
       rx->parser_start_code = evt.byte;
       continue;
